@@ -1,3 +1,5 @@
 __pycache__
 output/*
-data/*
+data/audio/maestro-v3.0.0/*
+data/audio/audio_chunks_10s/*
+data/audio/audio_chunks_20s/*
