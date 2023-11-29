@@ -1,0 +1,15 @@
+mkdir data
+mkdir data/audio/
+mkdir data/clipped_stft/
+mkdir data/resized_stft/
+mkdir data/spectrograms/
+mkdir data/stft_arrays/
+mkdir data/styleGAN/stft_arrays
+mkdir data/styleGAN/stft_images_256
+mkdir data/styleGAN/atft_images_512_gray
+mkdir data/styleGAN/stft_images_fake
+mkdir data/styleGAN/stft_images_fake_temp
+mkdir data/styleGAN/test_images
+mkdir data/audio/maestro-v3.0.0
+mkdir data/audio/audio_chunks_20s
+mkdir data/audio/audio_chunks_10s
