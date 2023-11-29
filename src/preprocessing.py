@@ -149,13 +149,13 @@ def record_mean_std():
 
     data = {"mean": mean_list, "std": std_list, "path": paths}
     df = pd.DataFrame.from_dict(data)
-    df.to_csv("./data/saved_mean_std.csv")
+    df.to_csv("../data/saved_mean_std.csv")
 
 def preprocessing_arrays():
     """
     Normalize STFT matrices and save them locally
     """
-    df = pd.read_csv("./data/saved_mean_std.csv")
+    df = pd.read_csv("../data/saved_mean_std.csv")
     paths = df['path']
     means = df['mean']
     stds = df['std']
@@ -293,10 +293,10 @@ def preprocessing():
     """
     Data processing for DCGAN and SpecGAN
     """
-    make_audio_chunks(seconds=20, dest_dir=AUDIO_CHUNKS_20S_DIR)
-    display_spectrogram()
-    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
-    audio_reconstruction()
+    # make_audio_chunks(seconds=20, dest_dir=AUDIO_CHUNKS_20S_DIR)
+    # display_spectrogram()
+    # convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
+    # audio_reconstruction()
     record_mean_std()
     preprocessing_arrays()
     downsample()
