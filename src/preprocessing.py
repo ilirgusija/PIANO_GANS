@@ -293,10 +293,10 @@ def preprocessing():
     """
     Data processing for DCGAN and SpecGAN
     """
-    # make_audio_chunks(seconds=20, dest_dir=AUDIO_CHUNKS_20S_DIR)
-    # display_spectrogram()
-    # convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
-    # audio_reconstruction()
+    make_audio_chunks(seconds=20, dest_dir=AUDIO_CHUNKS_20S_DIR)
+    display_spectrogram()
+    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
+    audio_reconstruction()
     record_mean_std()
     preprocessing_arrays()
     downsample()
