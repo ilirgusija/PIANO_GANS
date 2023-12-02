@@ -1,20 +1,22 @@
-import torch
 import torch.nn as nn
 
-D = 64  # model size coef
-LATENT_DIM = 100  # size of the random noise input in the generator
-
+BATCH_SIZE = 64
+TRAINING_RATIO = 5
+GRADIENT_PENALTY_WEIGHT = 10
+EPOCH = 5000
+D = 64
+LATENT_DIM = 100
+IMG_DIM = (1, 256, 256)
 
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
-
         self.model = nn.Sequential(
             nn.Linear(LATENT_DIM, 256 * D),
+            nn.Unflatten(1, (256, 4, 4)),
             nn.ReLU(),
-            nn.Unflatten(1, (16 * D, 4, 4)),
             nn.Upsample(scale_factor=2),  # 8
-            nn.Conv2d(16 * D, 8 * D, kernel_size=5, padding=2),
+            nn.Conv2d(8 * D, 8 * D, kernel_size=5, padding=2),
             nn.ReLU(),
             nn.Upsample(scale_factor=2),  # 16
             nn.Conv2d(8 * D, 4 * D, kernel_size=5, padding=2),
@@ -30,6 +32,7 @@ class Generator(nn.Module):
             nn.ReLU(),
             nn.Upsample(scale_factor=2),  # 256
             nn.Conv2d(D // 2, 1, kernel_size=5, padding=2),
+            nn.Tanh()
         )
 
     def forward(self, x):
@@ -39,7 +42,6 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
-
         self.model = nn.Sequential(
             nn.Conv2d(1, D, kernel_size=5, stride=2, padding=2),
             nn.LeakyReLU(0.2),
@@ -52,8 +54,9 @@ class Discriminator(nn.Module):
             nn.Conv2d(D * 8, D * 16, kernel_size=5, stride=2, padding=2),
             nn.LeakyReLU(0.2),
             nn.Flatten(),
-            nn.Linear(256, 256, 1),
+            nn.Linear(D * 16 * 16 * 16, 1)  # change the input size, idk if its right
         )
 
     def forward(self, x):
         return self.model(x)
+
