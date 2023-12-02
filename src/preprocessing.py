@@ -13,7 +13,6 @@ from pydub import AudioSegment
 from pydub.utils import make_chunks
 
 import preprocessing_utils as prep_utils
-# import util
 
 
 DATASET_DIR = "../data/audio/maestro-v3.0.0"
@@ -46,7 +45,7 @@ def make_audio_chunks(seconds, dest_dir):
     paths = prep_utils.get_absolute_file_paths(DATASET_DIR, ".wav")
 
     start_time = time.time()
-    for audio_path in paths:
+    for audio_path in paths:audio_reconstruction
         prep_utils.display_progress_eta(current_item=audio_path, total_items=paths, start_time=start_time)
 
         audio = AudioSegment.from_file(audio_path)
@@ -259,8 +258,13 @@ def convert_stft_to_images_grayscale(src_dir, dest_dir, ext=".png", size=None):
         cv2.imwrite(out_path, S_scaled)
 
 def dc_gan_processing():
-    paths = util.get_dataset_paths(AUDIO_CHUNKS_20S_DIR, ".wav")
-
+    paths = []
+    for subdir, dirs, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(extension):
+                path = os.path.join(subdir, file)
+                paths.append(path)
+    
     for path in paths:
         print("Converting ", path)
 
@@ -283,9 +287,9 @@ def style_gan_preprocessing():
     """
     Data processing for StyleGAN2-ADA-Pytorch
     """
-    # make_audio_chunks(seconds=10, dest_dir=AUDIO_CHUNKS_10S_DIR)
-    # convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STYLEGAN_STFT_ARRAYS_DIR, extension=".npy")
-    # convert_stft_to_images(src_dir=STYLEGAN_STFT_ARRAYS_DIR, dest_dir=STYLEGAN_STFT_IMAGES_TEST_DIR, size=256)
+    make_audio_chunks(seconds=10, dest_dir=AUDIO_CHUNKS_10S_DIR)
+    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STYLEGAN_STFT_ARRAYS_DIR, extension=".npy")
+    convert_stft_to_images(src_dir=STYLEGAN_STFT_ARRAYS_DIR, dest_dir=STYLEGAN_STFT_IMAGES_TEST_DIR, size=256)
     convert_stft_to_images_grayscale(src_dir=STYLEGAN_STFT_ARRAYS_DIR, dest_dir=STYLEGAN_STFT_IMAGES_512_GRAY_DIR,
                                      size=512)
 
@@ -303,6 +307,6 @@ def preprocessing():
 
 
 if __name__ == "__main__":
-    # dc_gan_processing()
     preprocessing()
-    # style_gan_preprocessing()
+    dc_gan_processing()
+    style_gan_preprocessing()
