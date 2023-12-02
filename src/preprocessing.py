@@ -13,7 +13,7 @@ from pydub import AudioSegment
 from pydub.utils import make_chunks
 
 import preprocessing_utils as prep_utils
-# import util
+import util
 
 
 DATASET_DIR = "../data/audio/maestro-v3.0.0"
@@ -283,9 +283,9 @@ def style_gan_preprocessing():
     """
     Data processing for StyleGAN2-ADA-Pytorch
     """
-    # make_audio_chunks(seconds=10, dest_dir=AUDIO_CHUNKS_10S_DIR)
-    # convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STYLEGAN_STFT_ARRAYS_DIR, extension=".npy")
-    # convert_stft_to_images(src_dir=STYLEGAN_STFT_ARRAYS_DIR, dest_dir=STYLEGAN_STFT_IMAGES_TEST_DIR, size=256)
+    make_audio_chunks(seconds=10, dest_dir=AUDIO_CHUNKS_10S_DIR)
+    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STYLEGAN_STFT_ARRAYS_DIR, extension=".npy")
+    convert_stft_to_images(src_dir=STYLEGAN_STFT_ARRAYS_DIR, dest_dir=STYLEGAN_STFT_IMAGES_TEST_DIR, size=256)
     convert_stft_to_images_grayscale(src_dir=STYLEGAN_STFT_ARRAYS_DIR, dest_dir=STYLEGAN_STFT_IMAGES_512_GRAY_DIR,
                                      size=512)
 
@@ -303,6 +303,6 @@ def preprocessing():
 
 
 if __name__ == "__main__":
-    # dc_gan_processing()
-    preprocessing()
+    dc_gan_processing()
+    #preprocessing()
     # style_gan_preprocessing()
