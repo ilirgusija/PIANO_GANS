@@ -7,5 +7,5 @@ data/styleGAN
 data/stft_arrays/*
 data/clipped_stft/*
 data/resized_stft/*
-data/spectograms/*
+data/spectrograms/*
 *.zip

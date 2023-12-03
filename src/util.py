@@ -7,7 +7,7 @@ import librosa.display
 
 eps = 1e-7
 
-df = pd.read_csv("./data/saved_mean_std.csv")
+df = pd.read_csv("../data/saved_mean_std.csv")
 means = df['mean']
 stds = df['std']
 mag_mean = 0
@@ -31,7 +31,7 @@ def plot_loss(path):
     ax.plot(epoch, d_acc, c='g', label='d_acc')
     ax.plot(epoch, g_loss, c='r', label='g_loss')
     ax.legend()
-    plt.savefig("./loss_plot.png")
+    plt.savefig("../output/loss_plot.png")
 
 
 def get_dataset_paths(directory, extension):
