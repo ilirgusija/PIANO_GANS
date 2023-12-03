@@ -44,7 +44,6 @@ def gradient_penalty_loss(y_true, y_pred, averaged_samples, gradient_penalty_wei
     return gradient_penalty
 
 
-
 def tile_images(image_stack):
     assert len(image_stack.shape) == 3
     image_list = [image_stack[i, :, :] for i in range(image_stack.shape[0])]
@@ -88,26 +87,6 @@ def save_audio(y, path, cache):
     y = librosa.griffinlim(s, hop_length=int(cache['hop_length']))
     scipy.io.wavfile.write(path, cache['sampling_rate'], y)
 
-
-def swap_input(model, input_layer):
-    """ swap model input/output.  TODO: Are there any smarter way? """
-    x = input_layer
-    for layer in model.layers[1:-1]:
-        x = layer(x)
-    real_fake = model.layers[-1](x)
-    return real_fake
-
-
-def write_log(log_path, names_g, logs_g, names_d, logs_d, batch_no, epoch):
-    for name, value in zip(names_d, logs_d):
-        losses[name].append(value)
-    losses[names_g].append(logs_g)
-    losses["epoch"].append(epoch)
-    losses["nb_batch_g"].append(batch_no)
-    df = pd.DataFrame(losses, columns=losses.keys())
-    df.to_json(log_path + "loss.json")
-
-
 def get_dataset_paths(directory, extension):
     paths = []
     for subdir, dirs, files in os.walk(directory):
@@ -117,8 +96,6 @@ def get_dataset_paths(directory, extension):
                 paths.append(path)
     return paths
 
-#--------------------------------------------------------------------------------------------
-#--------------------------------------------------------------------------------------------
 # load parameters for audio reconstruction
 with open(STFT_ARRAY_DIR + 'my_cache.json') as f:
     cache = json.load(f)
@@ -135,127 +112,61 @@ X_train_ = X_train_[:, :, :, None]
 generator = Generator()
 discriminator = Discriminator()
 
-
-# EVERYTHING HERE DOWN NEEDS TO CHANGE
-
-#########################################################################
-
-#########################################################################
-
-#########################################################################
-
-#########################################################################
-
-#########################################################################
-
-### Generator ### 
-# for layer in discriminator.layers:
-#     layer.trainable = False
-# discriminator.trainable = False
-# generator.trainable = True
-
-# generator_input = Input(shape=(LATENT_DIM,))  # LATENT_DIM=100 = dimension of random input vector
-# generator_layers = generator(generator_input)
-
-# # replace input layer of discriminator with generator output
-# d_layers_for_generator = swap_input(discriminator, generator_layers)
-# generator_model = Model(inputs=[generator_input], outputs=[d_layers_for_generator])
-# generator_model.compile(optimizer=Adam(0.0001, beta_1=0.5, beta_2=0.9), loss=[wasserstein_loss])
-# generator_model.summary()
-
-# for layer in discriminator.layers:
-#     layer.trainable = True
-# for layer in generator.layers:
-#     layer.trainable = False
-# discriminator.trainable = True
-# generator.trainable = False
-
-# real_samples = Input(shape=X_train_.shape[1:])
-# generator_input_for_discriminator = Input(shape=(LATENT_DIM,))  # random seed input
-# generated_samples_for_discriminator = generator(generator_input_for_discriminator)  # random seed -> generator
-# d_output_from_generator = swap_input(discriminator, generated_samples_for_discriminator) # # random seed -> generator -> discriminator
-# d_output_from_real_samples = swap_input(discriminator, real_samples) # real spectrogram images -> discriminator_loss_real
-
-# # We also need to generate weighted-averages of real and generated samples, to use for the gradient norm penalty.
-# averaged_samples = RandomWeightedAverage()(inputs=[real_samples, generated_samples_for_discriminator])
-# averaged_samples_out = swap_input(discriminator, averaged_samples) # weighted-averages of real and generated samples -> discriminator
-
-# # The gradient penalty loss function: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
-# partial_gp_loss = partial(gradient_penalty_loss,
-#                           averaged_samples=averaged_samples,
-#                           gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT)
-# partial_gp_loss.__name__ = 'gradient_penalty'  # Functions need names or Keras will throw an error
-
-# # input: real samples / random seed for generator
-# # output: real samples -> discriminator / random seed -> generator -> discriminator_loss /
-# #         weighted-averages of real and generated samples -> discriminator / real samples -> discriminator -> categorical output
-# discriminator_model = Model(inputs=[real_samples, generator_input_for_discriminator],
-#                             outputs=[d_output_from_real_samples, d_output_from_generator,
-#                                      averaged_samples_out])
-# # We use the Adam paramaters from Gulrajani et al. We use the Wasserstein loss for both the real and generated
-# # samples and the gradient penalty loss for the averaged samples
-# discriminator_model.compile(optimizer=Adam(0.0001, beta_1=0.5, beta_2=0.9),
-#                             loss=[wasserstein_loss, wasserstein_loss, partial_gp_loss])
-# discriminator_model.summary()
-
-
-##############################################################################################################
 # Training
 # labels
 positive_y = np.ones((BATCH_SIZE, 1), dtype=np.float32)  # for real samples
 negative_y = -positive_y                                # for generated fake samples
 dummy_y = np.zeros((BATCH_SIZE, 1), dtype=np.float32)  # passed to the gradient_penalty loss function and is not used.
 
-# Store losses for each training step
-now = datetime.datetime.now()
-datestr = now.strftime("%Y-%m-%d_%H%M%S")
-log_path = './logs/'
-g_names = "generator_loss_ws"
-d_names = ["discriminator_loss_real", "discriminator_loss_fake", "discriminator_loss_averaged"]
-losses = {"epoch": [], "nb_batch_g": [], "discriminator_loss_real": [],
-          "discriminator_loss_fake": [], "discriminator_loss_averaged": [],
-          "generator_loss_ws": []}
-
 
 training_set_size = X_train_.shape[0]
 indices = np.arange(training_set_size)
 number_batches = int(training_set_size / BATCH_SIZE)
 
-generator.load_weights("./data/images/generator_epoch_33_-0.778.h5")
-generate_images(generator, "./output/", 33, cache)
+gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
+disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
 
-for epoch in range(34, EPOCH):
+# Training loop
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+for epoch in range(EPOCH):
     np.random.shuffle(indices)
-
     print("Epoch: ", epoch)
-    print("Number of batches: ", number_batches)
-
-    minibatches_size = BATCH_SIZE * TRAINING_RATIO
-    batch_per_epoch = int(training_set_size // (BATCH_SIZE * TRAINING_RATIO))
-    for i in range(batch_per_epoch):
-        discriminator_minibatches = X_train_[indices[i * minibatches_size:(i + 1) * minibatches_size]]
-
-        # training D. D will be trained (TRAINING_RATIO) times more than G
+    
+    for i in range(number_batches):
+        discriminator.train()
+        generator.train()
+        
+        # Training Discriminator
         for j in range(TRAINING_RATIO):
-            image_batch = discriminator_minibatches[j * BATCH_SIZE:(j + 1) * BATCH_SIZE]
+            disc_optimizer.zero_grad()
+            real_samples = # Fetch real samples from X_train_
+            real_samples = torch.tensor(real_samples, device=device, dtype=torch.float32)
+            
+            noise = torch.rand(BATCH_SIZE, LATENT_DIM, device=device)
+            generated_samples = generator(noise).detach()  # Detach to avoid backprop through G
+            
+            gp_loss = gradient_penalty_loss(discriminator, real_samples, generated_samples, device)
+            
+            disc_real = discriminator(real_samples)
+            disc_fake = discriminator(generated_samples)
+            
+            disc_loss = -torch.mean(disc_real) + torch.mean(disc_fake) + gp_loss
+            disc_loss.backward()
+            disc_optimizer.step()
 
-            noise = np.random.rand(BATCH_SIZE, LATENT_DIM).astype(np.float32)
-            d_logs = discriminator_model.train_on_batch([image_batch, noise], [positive_y, negative_y, dummy_y])
-            nb_batch = (j + i * TRAINING_RATIO) + epoch * (batch_per_epoch * TRAINING_RATIO)
+        # Training Generator
+        gen_optimizer.zero_grad()
+        noise = torch.rand(BATCH_SIZE, LATENT_DIM, device=device)
+        generated_samples = generator(noise)
+        gen_loss = -torch.mean(discriminator(generated_samples))
+        gen_loss.backward()
+        gen_optimizer.step()
 
-        # training G
-        g_logs = generator_model.train_on_batch(np.random.rand(BATCH_SIZE, LATENT_DIM), [positive_y])
-        nb_batch = epoch * (batch_per_epoch * TRAINING_RATIO) + i * TRAINING_RATIO
+        # Generate images and save audio per epoch
+        # Adapt generate_images and save_audio functions to work with PyTorch tensors and operations
+        generate_images(generator, "./output/", epoch, cache)
 
-        # write log for each batch training step
-        write_log(log_path, g_names, g_logs, d_names, d_logs, nb_batch, epoch)
-
-    # export generated images and save sample audio per each epoch
-    generate_images(generator, "./output/", epoch, cache)
-
-    # save models each epoch
-    outfile = os.path.join(AUDIO_OUT_DIR, 'generator_epoch_{}_{:.3}.h5'.format(epoch, g_logs))
-    generator.save_weights(outfile)
-    outfile = os.path.join(AUDIO_OUT_DIR, 'discriminator_epoch_{}_{:.3}.h5'.format(epoch, d_logs[0]))
-    discriminator.save_weights(outfile)
-
+        # Save models at the end of each epoch
+        torch.save(generator.state_dict(), os.path.join(AUDIO_OUT_DIR, f'generator_epoch_{epoch}.pth'))
+        torch.save(discriminator.state_dict(), os.path.join(AUDIO_OUT_DIR, f'discriminator_epoch_{epoch}.pth'))
