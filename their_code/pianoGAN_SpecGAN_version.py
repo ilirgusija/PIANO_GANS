@@ -18,12 +18,11 @@ RandomWeightedAverage function which used the keras.layers.merge._Merge layer).
 import os
 import datetime
 import numpy as np
+from tensorflow.keras import optimizers
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Input, Dense, Reshape, Flatten
 from tensorflow.keras.layers import Activation, UpSampling2D, Conv2D
 from tensorflow.keras.layers import LeakyReLU
-from tensorflow.keras.optimizers import Adam
-from keras import backend as K
 from functools import partial
 import tensorflow as tf
 
@@ -33,8 +32,18 @@ import skimage.transform
 import json
 import pandas as pd
 
-from tensorflow.python.framework.ops import disable_eager_execution
-disable_eager_execution()
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(f"{len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
+
 
 try:
     from PIL import Image
@@ -42,7 +51,7 @@ except ImportError:
     print('This script depends on pillow! Please install it (e.g. with pip install pillow)')
     exit()
 
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 TRAINING_RATIO = 5  # The training ratio is the number of discriminator updates per generator update. The paper uses 5.
 GRADIENT_PENALTY_WEIGHT = 10  # As per the paper
 EPOCH = 5000
@@ -56,25 +65,62 @@ AUDIO_OUT_DIR = "../data/images/"
 
 def wasserstein_loss(y_true, y_pred):
     """ for more detail: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
-    return K.mean(y_true * y_pred)
-
+    return tf.reduce_mean(y_true * y_pred)
 
 def gradient_penalty_loss(y_true, y_pred, averaged_samples, gradient_penalty_weight):
-    """ for more detail: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
-    gradients = K.gradients(K.sum(y_pred), averaged_samples)
-    gradient_l2_norm = K.sqrt(K.sum(K.square(gradients)))
-    gradient_penalty = gradient_penalty_weight * K.square(1 - gradient_l2_norm)
-    return gradient_penalty
+    """
+    Calculates the gradient penalty loss for a batch of "averaged" samples.
+
+    The gradient penalty is a key component of the Improved Wasserstein GAN. It imposes a
+    soft 1-Lipschitz constraint by penalizing the norm of the discriminator's gradient with
+    respect to its input. This penalty encourages the gradient norm to stay close to 1.
+
+    In practice, we cannot compute gradients at all points in the discriminator's input space.
+    Instead, we sample points on the straight lines between pairs of points from the data
+    distribution and the generator distribution. The gradients at these interpolated points
+    are then used in the penalty.
+
+    The function requires the actual output of the discriminator (`y_pred`), the original
+    averaged samples (interpolated between real and fake), and the weight for the penalty term.
+
+    Args:
+        y_true: The ground truth outputs (unused in this function).
+        y_pred: The predicted outputs from the discriminator.
+        averaged_samples: Tensor of averaged samples over which the gradient is computed.
+        gradient_penalty_weight: Scalar that weighs the gradient penalty term.
+
+    Returns:
+        The computed gradient penalty, averaged over the batch.
+    """
+
+    with tf.GradientTape() as tape:
+        # Ensure that the averaged samples are watched by the tape
+        tape.watch(averaged_samples)
+        # Compute the discriminator's output on the averaged samples
+        prediction = y_pred(averaged_samples)
+
+    # Compute the gradients with respect to the averaged samples
+    gradients = tape.gradient(prediction, averaged_samples)
+
+    # Compute the L2 norm of the gradients
+    gradients_sqr = tf.square(gradients)
+    gradients_sqr_sum = tf.reduce_sum(gradients_sqr, axis=np.arange(1, len(gradients_sqr.shape)))
+    gradient_l2_norm = tf.sqrt(gradients_sqr_sum)
+
+    # Compute the gradient penalty
+    gradient_penalty = gradient_penalty_weight * tf.square(1 - gradient_l2_norm)
+
+    # Return the mean penalty across the batch
+    return tf.reduce_mean(gradient_penalty)
 
 
 def make_generator():
     """Creates a generator model that takes a LATENT_DIM-dimensional noise vector as a "seed", and outputs images
-    of size 256x256x1 = IMG_DIM."""
+    of size 512x512x1 = IMG_DIM."""
     # TODO: Figure out how we want to rezise generator layers to handle 512x512, 
     model = Sequential()
-    # model.add(Dense(512 * D, input_dim=LATENT_DIM))
-    model.add(Dense(256 * D, input_dim=LATENT_DIM))
-    model.add(Reshape((4, 4, 16 * D)))
+    model.add(Dense(512 * D, input_dim=LATENT_DIM))
+    model.add(Reshape((4, 4, 32 * D)))
     model.add(Activation('relu'))
     model.add(UpSampling2D(size=(2, 2)))  # 8
     model.add(Conv2D(8 * D, (5, 5), padding='same'))
@@ -150,8 +196,8 @@ def generate_images(generator_model, output_dir, epoch, cache):
         outfile = os.path.join(output_dir, "train_epoch_%02d(%02d).wav" % (epoch, i))
         save_audio(w, outfile, cache)
     # TODO: Figure out how we handle this:
-    # test_image_stack = (test_image_stack * 255.5) + 255.5
-    test_image_stack = (test_image_stack * 127.5) + 127.5
+    test_image_stack = (test_image_stack * 255.5) + 255.5
+    # test_image_stack = (test_image_stack * 127.5) + 127.5
     test_image_stack = np.squeeze(np.round(test_image_stack).astype(np.uint8))
     tiled_output = tile_images(test_image_stack)
     tiled_output = Image.fromarray(tiled_output, mode='L')  # L specifies greyscale
@@ -198,12 +244,24 @@ def get_dataset_paths(directory, extension):
                 paths.append(path)
     return paths
 
+# @tf.function
+def train_discriminator_step(discriminator_model, real_images, noise, positive_y, negative_y, dummy_y):
+    with tf.GradientTape() as tape:
+        d_logs = discriminator_model.train_on_batch([real_images, noise], [positive_y, negative_y, dummy_y])
+    return d_logs
+
+# @tf.function
+def train_generator_step(generator_model, batch_size, latent_dim, positive_y):
+    noise = tf.random.normal([batch_size, latent_dim])
+    g_logs = generator_model.train_on_batch(noise, positive_y)
+    return g_logs
+
 #--------------------------------------------------------------------------------------------
 #--------------------------------------------------------------------------------------------
 # load parameters for audio reconstruction
 with open(STFT_ARRAY_DIR + 'my_cache.json') as f:
     cache = json.load(f)
-print(cache)
+# print(cache)
 
 # load training data
 paths = get_dataset_paths(STFT_ARRAY_DIR, ".npy")
@@ -230,7 +288,7 @@ generator_layers = generator(generator_input)
 # replace input layer of discriminator with generator output
 d_layers_for_generator = swap_input(discriminator, generator_layers)
 generator_model = Model(inputs=[generator_input], outputs=[d_layers_for_generator])
-generator_model.compile(optimizer=Adam(0.0001, beta_1=0.5, beta_2=0.9), loss=[wasserstein_loss])
+generator_model.compile(optimizer=optimizers.Adam(0.0001, beta_1=0.5, beta_2=0.9), loss=[wasserstein_loss])
 generator_model.summary()
 
 
@@ -254,21 +312,22 @@ averaged_samples = RandomWeightedAverage()(inputs=[real_samples, generated_sampl
 averaged_samples_out = swap_input(discriminator, averaged_samples) # weighted-averages of real and generated samples -> discriminator
 
 # The gradient penalty loss function: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
-partial_gp_loss = partial(gradient_penalty_loss,
-                          averaged_samples=averaged_samples,
-                          gradient_penalty_weight=GRADIENT_PENALTY_WEIGHT)
-partial_gp_loss.__name__ = 'gradient_penalty'  # Functions need names or Keras will throw an error
 
 # input: real samples / random seed for generator
 # output: real samples -> discriminator / random seed -> generator -> discriminator_loss /
 #         weighted-averages of real and generated samples -> discriminator / real samples -> discriminator -> categorical output
 discriminator_model = Model(inputs=[real_samples, generator_input_for_discriminator],
-                            outputs=[d_output_from_real_samples, d_output_from_generator,
-                                     averaged_samples_out])
+                            outputs=[d_output_from_real_samples, d_output_from_generator, averaged_samples_out])
+
+# Custom loss function for the gradient penalty
+def custom_gradient_penalty_loss(y_true, y_pred):
+    # Compute gradient penalty on averaged samples
+    return gradient_penalty_loss(y_true, y_pred, averaged_samples, GRADIENT_PENALTY_WEIGHT)
+
 # We use the Adam paramaters from Gulrajani et al. We use the Wasserstein loss for both the real and generated
 # samples and the gradient penalty loss for the averaged samples
-discriminator_model.compile(optimizer=Adam(0.0001, beta_1=0.5, beta_2=0.9),
-                            loss=[wasserstein_loss, wasserstein_loss, partial_gp_loss])
+discriminator_model.compile(optimizer=optimizers.Adam(0.0001, beta_1=0.5, beta_2=0.9),
+                            loss=[wasserstein_loss, wasserstein_loss, custom_gradient_penalty_loss])
 discriminator_model.summary()
 
 
@@ -282,7 +341,7 @@ dummy_y = np.zeros((BATCH_SIZE, 1), dtype=np.float32)  # passed to the gradient_
 # Store losses for each training step
 now = datetime.datetime.now()
 datestr = now.strftime("%Y-%m-%d_%H%M%S")
-log_path = './logs/'
+log_path = '../logs/'
 g_names = "generator_loss_ws"
 d_names = ["discriminator_loss_real", "discriminator_loss_fake", "discriminator_loss_averaged"]
 losses = {"epoch": [], "nb_batch_g": [], "discriminator_loss_real": [],
@@ -293,9 +352,6 @@ losses = {"epoch": [], "nb_batch_g": [], "discriminator_loss_real": [],
 training_set_size = X_train_.shape[0]
 indices = np.arange(training_set_size)
 number_batches = int(training_set_size / BATCH_SIZE)
-
-generator.load_weights("./data/images/generator_epoch_33_-0.778.h5")
-generate_images(generator, "./output/", 33, cache)
 
 for epoch in range(34, EPOCH):
     np.random.shuffle(indices)
@@ -313,18 +369,18 @@ for epoch in range(34, EPOCH):
             image_batch = discriminator_minibatches[j * BATCH_SIZE:(j + 1) * BATCH_SIZE]
 
             noise = np.random.rand(BATCH_SIZE, LATENT_DIM).astype(np.float32)
-            d_logs = discriminator_model.train_on_batch([image_batch, noise], [positive_y, negative_y, dummy_y])
+            d_logs = train_discriminator_step(discriminator_model, image_batch, noise, positive_y, negative_y, dummy_y)
             nb_batch = (j + i * TRAINING_RATIO) + epoch * (batch_per_epoch * TRAINING_RATIO)
 
         # training G
-        g_logs = generator_model.train_on_batch(np.random.rand(BATCH_SIZE, LATENT_DIM), [positive_y])
+        g_logs = train_generator_step(generator_model, BATCH_SIZE, LATENT_DIM, positive_y)
         nb_batch = epoch * (batch_per_epoch * TRAINING_RATIO) + i * TRAINING_RATIO
 
         # write log for each batch training step
         write_log(log_path, g_names, g_logs, d_names, d_logs, nb_batch, epoch)
 
     # export generated images and save sample audio per each epoch
-    generate_images(generator, "./output/", epoch, cache)
+    generate_images(generator, "../output/", epoch, cache)
 
     # save models each epoch
     outfile = os.path.join(AUDIO_OUT_DIR, 'generator_epoch_{}_{:.3}.h5'.format(epoch, g_logs))

@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 BATCH_SIZE = 64
 TRAINING_RATIO = 5
@@ -56,6 +57,28 @@ class Discriminator(nn.Module):
             nn.Flatten(),
             nn.Linear(D * 16 * 16 * 16, 1)  # change the input size, idk if its right
         )
+
+    def compute_gradient_penalty(self, real_samples, fake_samples):
+        # Random weight term for interpolation between real and fake samples
+        alpha = torch.rand((real_samples.size(0), 1, 1, 1), device=real_samples.device)
+        # Get random interpolation between real and fake samples
+        interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+        d_interpolates = self(interpolates)
+        fake = torch.ones(d_interpolates.size(), requires_grad=False, device=real_samples.device)
+        
+        # Get gradient w.r.t. interpolates
+        gradients = torch.autograd.grad(
+            outputs=d_interpolates,
+            inputs=interpolates,
+            grad_outputs=fake,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+        
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty
+
 
     def forward(self, x):
         return self.model(x)
