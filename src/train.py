@@ -169,4 +169,4 @@ def main(b):
 
     # Training loop
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train(5000, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, X_train_, device)
+    train(5000, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, train_loader, device)
