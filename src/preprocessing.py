@@ -119,7 +119,7 @@ def audio_reconstruction():
         # Save reconstructed data
         scipy.io.wavfile.write(out, 22050, y)
 
-def create_cache_file(cache_file_path, hop_length, input_freq, input_time, eps=1e-7):
+def create_cache_file(cache_file_path, hop_length, input_freq, input_time, eps=1e-7, sr=22050):
     """
     Creates a cache file containing mean and std of STFT magnitudes, hop length, input frequency, input time, 
     epsilon value, and sampling rate for each audio file.
@@ -147,8 +147,7 @@ def create_cache_file(cache_file_path, hop_length, input_freq, input_time, eps=1
         S = np.log(S)
         mag_mean = float(np.mean(S))
         mag_std = float(np.std(S))
-        sr = 22050
-
+        
         # Save data in cache
         cache_data[path] = {
             'Mean Magnitude': mag_mean,
@@ -294,7 +293,8 @@ def preprocessing():
 
 
 if __name__ == "__main__":
-    preprocessing()
-    create_cache_file(STFT_ARRAY_DIR, 512, 1025, 862)
+    # preprocessing()
+    # create_cache_file(STFT_ARRAY_DIR, 512, 1025, 862)
+    create_cache_file(RESIZED_STFT_DIR, 512, 512, 512)
     # dc_gan_processing()
     # style_gan_preprocessing()
