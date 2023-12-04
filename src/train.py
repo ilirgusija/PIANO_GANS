@@ -1,4 +1,5 @@
 import datetime
+from CustomDataset import CustomDataset
 import librosa
 import numpy as np
 from PIL import Image
@@ -11,6 +12,9 @@ import json
 import scipy.io.wavfile
 import torch.optim as optim
 import torch.nn as nn
+from torch.utils.data import DataLoader
+from torch.autograd import grad
+
 
 BATCH_SIZE = 64
 TRAINING_RATIO = 5  # The training ratio is the number of discriminator updates per generator update. The paper uses 5.
@@ -31,7 +35,7 @@ def wasserstein_loss(y_true, y_pred):
 
 def gradient_penalty_loss(y_true, y_pred, averaged_samples, gradient_penalty_weight):
     """for more detail: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
-    gradients = torch.autograd.grad(
+    gradients = grad(
         outputs=y_pred,
         inputs=averaged_samples,
         grad_outputs=torch.ones_like(y_pred),
@@ -80,97 +84,74 @@ def save_audio(y, path, cache):
     scipy.io.wavfile.write(path, cache["sampling_rate"], y)
 
 
-def get_dataset_paths(directory, extension):
-    paths = []
-    for subdir, dirs, files in os.walk(directory):
-        for file in files:
-            if file.lower().endswith(extension):
-                path = os.path.join(subdir, file)
-                paths.append(path)
-    return paths
-
-
 # load parameters for audio reconstruction
 with open(STFT_ARRAY_DIR + "my_cache.json") as f:
     cache = json.load(f)
 print(cache)
 
-# load training data
-paths = get_dataset_paths(STFT_ARRAY_DIR, ".npy")
-X_train_ = np.zeros(shape=(len(paths), IMG_DIM[0], IMG_DIM[1]))
-for i, path in enumerate(paths):
-    X_train_[i, :, :] = np.load(paths[i])
-X_train_ = X_train_[:, :, :, None]
+train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
+
+X_train_ = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Now we initialize the generator and discriminator.
 generator = Generator()
 discriminator = Discriminator()
 
-training_set_size = X_train_.shape[0]
-indices = np.arange(training_set_size)
-number_batches = int(training_set_size / BATCH_SIZE)
+gen_optimizer = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+gen_loss = nn.MSELoss()  # Example Wasserstein loss function
 
-gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
-disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
+train_loader = DataLoader(X_train_, batch_size=BATCH_SIZE, shuffle=True)
 
 # Training loop
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+num_epochs = 100
 
-for epoch in range(EPOCH):
-    np.random.shuffle(indices)
-    print("Epoch: ", epoch)
-    minibatches_size = BATCH_SIZE * TRAINING_RATIO
-    for i in range(number_batches):
-        discriminator.train()
-        generator.train()
-        discriminator_minibatches = X_train_[
-            indices[i * minibatches_size : (i + 1) * minibatches_size]
-        ]
+for epoch in range(num_epochs):
+    for i, data in enumerate(train_loader):
+        data = data.to(device)
 
-        # Training Discriminator
-        for j in range(TRAINING_RATIO):
-            disc_optimizer.zero_grad()
-            real_samples = discriminator_minibatches[
-                j * BATCH_SIZE : (j + 1) * BATCH_SIZE
-            ]
-            real_samples = torch.tensor(
-                real_samples, device=device, dtype=torch.float32
-            )
+        disc_optimizer.zero_grad()
 
-            noise = torch.rand(BATCH_SIZE, LATENT_DIM, device=device)
-            generated_samples = generator(
-                noise
-            ).detach()  # Detach to avoid backprop through G
+        # Generate fake data from the generator
+        noise = np.random.rand(BATCH_SIZE, LATENT_DIM).astype(np.float32)
 
-            gp_loss = gradient_penalty_loss(
-                discriminator, real_samples, generated_samples, device
-            )
+        # Compute Wasserstein loss for real and fake data
+        disc_real_output = discriminator(data)
+        disc_fake_output = discriminator(noise)
+        disc_loss_wasserstein = wasserstein_loss(disc_fake_output, disc_real_output)
 
-            disc_real = discriminator(real_samples)
-            disc_fake = discriminator(generated_samples)
+        # Compute gradient penalty
+        epsilon = torch.rand(BATCH_SIZE, 1, 1, 1).to(device)
+        interpolated = epsilon * data + (1 - epsilon) * noise
+        interpolated.requires_grad = True
+        disc_y_pred = discriminator(interpolated)
+        gradient_penalty = gradient_penalty_loss(disc_y_pred, interpolated, GRADIENT_PENALTY_WEIGHT)
 
-            disc_loss = -torch.mean(disc_real) + torch.mean(disc_fake) + gp_loss
-            disc_loss.backward()
-            disc_optimizer.step()
+        # Total discriminator loss
+        disc_loss = disc_loss_wasserstein + gradient_penalty
+        disc_loss.backward()
+        disc_optimizer.step()
 
-        # Training Generator
+        # Train Generator
         gen_optimizer.zero_grad()
-        noise = torch.rand(BATCH_SIZE, LATENT_DIM, device=device)
-        generated_samples = generator(noise)
-        gen_loss = -torch.mean(discriminator(generated_samples))
+
+        gen_loss = gen_loss(discriminator(noise))
         gen_loss.backward()
         gen_optimizer.step()
 
-        # Generate images and save audio per epoch
-        # Adapt generate_images and save_audio functions to work with PyTorch tensors and operations
-        generate_images(generator, "./output/", epoch, cache)
+        if i % 100 == 0:
+            print(f"Epoch [{epoch}/{num_epochs}], Batch Step [{i}/{len(train_loader)}], "
+                  f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}")
 
-        # Save models at the end of each epoch
-        torch.save(
-            generator.state_dict(),
-            os.path.join(AUDIO_OUT_DIR, f"generator_epoch_{epoch}.pth"),
-        )
-        torch.save(
-            discriminator.state_dict(),
-            os.path.join(AUDIO_OUT_DIR, f"discriminator_epoch_{epoch}.pth"),
-        )
+    generate_images(generator, "./output/", epoch, cache)
+
+    torch.save(
+        generator.state_dict(),
+        os.path.join(AUDIO_OUT_DIR, f"generator_epoch_{epoch}.pth"),
+    )
+    torch.save(
+        discriminator.state_dict(),
+        os.path.join(AUDIO_OUT_DIR, f"discriminator_epoch_{epoch}.pth"),
+    )
