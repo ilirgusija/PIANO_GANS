@@ -114,8 +114,11 @@ for epoch in range(num_epochs):
 
         # Generate fake data from the generator
         noise = np.random.rand(BATCH_SIZE, LATENT_DIM).astype(np.float32)
+        noise = torch.from_numpy(noise)
+        print(data.shape, "\n")
+        print(noise.shape)
 
-        # Compute Wasserstein loss for real and fake data
+        generated_data = generator(noise)
         disc_real_output = discriminator(data)
         disc_fake_output = discriminator(noise)
         disc_loss_wasserstein = wasserstein_loss(disc_fake_output, disc_real_output)
@@ -137,13 +140,13 @@ for epoch in range(num_epochs):
         # Train Generator
         gen_optimizer.zero_grad()
 
-        gen_loss = gen_loss(discriminator(noise))
+        gen_loss = gen_loss(discriminator(disc_fake_output))
         gen_loss.backward()
         gen_optimizer.step()
 
         if i % 100 == 0:
             print(
-                f"Epoch [{epoch}/{num_epochs}], Batch Step [{i}/{len(train_loader)}], "
+                f"Epoch [{epoch}/{num_epochs}], Batch Step [{i}/{len(X_train_)}], "
                 f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}"
             )
 
