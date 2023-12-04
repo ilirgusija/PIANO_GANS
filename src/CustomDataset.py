@@ -19,4 +19,11 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
-        return np.load(img_path)
+        img_data = np.load(img_path)
+
+        # Add a channel dimension if missing
+        img_data = np.expand_dims(
+            img_data, axis=0
+        )  # Assuming it's a single channel image
+
+        return img_data

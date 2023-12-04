@@ -44,8 +44,7 @@ def gradient_penalty_loss(y_pred, averaged_samples, gradient_penalty_weight):
         only_inputs=True,
     )[0]
     gradient_l2_norm = torch.sqrt(torch.sum(torch.square(gradients)))
-    gradient_penalty = gradient_penalty_weight * \
-        torch.square(1 - gradient_l2_norm)
+    gradient_penalty = gradient_penalty_weight * torch.square(1 - gradient_l2_norm)
     return gradient_penalty
 
 
@@ -63,15 +62,13 @@ def generate_images(generator_model, output_dir, epoch, cache):
     # generate and save sample audio file for each epoch
     for i in range(5):
         w = test_image_stack[i]
-        outfile = os.path.join(
-            output_dir, "train_epoch_%02d(%02d).wav" % (epoch, i))
+        outfile = os.path.join(output_dir, "train_epoch_%02d(%02d).wav" % (epoch, i))
         save_audio(w, outfile, cache)
 
     test_image_stack = (test_image_stack * 127.5) + 127.5
     test_image_stack = np.squeeze(np.round(test_image_stack).astype(np.uint8))
     tiled_output = tile_images(test_image_stack)
-    tiled_output = Image.fromarray(
-        tiled_output, mode="L")  # L specifies greyscale
+    tiled_output = Image.fromarray(tiled_output, mode="L")  # L specifies greyscale
     outfile = os.path.join(output_dir, "epoch_{}.png".format(epoch))
     tiled_output.save(outfile)
 
@@ -86,15 +83,28 @@ def save_audio(y, path, cache):
     y = librosa.griffinlim(s, hop_length=int(cache["hop_length"]))
     scipy.io.wavfile.write(path, cache["sampling_rate"], y)
 
+
 D = 64
 LATENT_DIM = 100
 IMG_DIM = (1, 256, 256)
 
-def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, data_loader, cache, device):
-    data_loader.to(device)
-    for epoch in range(n_epochs):
+
+def train(
+    n_epochs,
+    generator,
+    discriminator,
+    batch_size,
+    training_ratio,
+    gen_optimizer,
+    disc_optimizer,
+    data_loader,
+    cache,
+    device,
+):
+    for epoch in range(1, n_epochs + 1):
         print("Epoch: ", epoch)
         for i, real_samples in enumerate(data_loader):
+            real_samples.to(device)
             discriminator.train()
             generator.train()
 
@@ -104,16 +114,20 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
                 # Generate fake data from the generator
                 noise = np.random.rand(batch_size, LATENT_DIM).astype(np.float32)
                 noise = torch.from_numpy(noise)
-                # print(real_samples.shape, "\n")
-                # print(noise.shape)
 
                 fake_samples = generator(noise)
+                print(real_samples.shape)
+
                 disc_real_output = discriminator(real_samples)
                 disc_fake_output = discriminator(fake_samples)
-                disc_loss_wasserstein = wasserstein_loss(disc_fake_output, disc_real_output)
+                disc_loss_wasserstein = wasserstein_loss(
+                    disc_fake_output, disc_real_output
+                )
 
                 # Compute gradient penalty
-                gradient_penalty = discriminator.compute_gradient_penalty(real_samples, fake_samples)
+                gradient_penalty = discriminator.compute_gradient_penalty(
+                    real_samples, fake_samples
+                )
 
                 # Total discriminator loss
                 disc_loss = disc_loss_wasserstein + gradient_penalty
@@ -143,12 +157,11 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             )
             torch.save(
                 discriminator.state_dict(),
-                os.path.join(
-                    AUDIO_OUT_DIR, f"discriminator_epoch_{epoch}.pth"),
+                os.path.join(AUDIO_OUT_DIR, f"discriminator_epoch_{epoch}.pth"),
             )
 
 
-def main(b):
+def main(b=64):
     # load parameters for audio reconstruction
     with open(STFT_ARRAY_DIR + "my_cache.json") as f:
         cache = json.load(f)
@@ -156,11 +169,10 @@ def main(b):
     # Now we initialize the generator and discriminator.
     generator = Generator()
     discriminator = Discriminator()
-    
-    train_set=CustomDataset(data_dir=STFT_ARRAY_DIR)
+
+    train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
     # train_loader=DataLoader(train_set, batch_size=b, shuffle=True)
-    batch_size=64
-    train_loader=DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_set, batch_size=b, shuffle=True)
 
     gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
@@ -169,4 +181,19 @@ def main(b):
 
     # Training loop
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train(5000, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, train_loader, device)
+    train(
+        5000,
+        generator,
+        discriminator,
+        b,
+        training_ratio,
+        gen_optimizer,
+        disc_optimizer,
+        train_loader,
+        cache,
+        device,
+    )
+
+
+if __name__ == "__main__":
+    main()
