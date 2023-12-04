@@ -102,13 +102,12 @@ gen_optimizer = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999)
 disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
 gen_loss = nn.MSELoss()  # Example Wasserstein loss function
 
-train_loader = DataLoader(X_train_, batch_size=BATCH_SIZE, shuffle=True)
 
 # Training loop
 num_epochs = 100
 
 for epoch in range(num_epochs):
-    for i, data in enumerate(train_loader):
+    for i, data in enumerate(X_train_):
         data = data.to(device)
 
         disc_optimizer.zero_grad()

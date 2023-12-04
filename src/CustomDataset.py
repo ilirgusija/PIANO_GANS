@@ -1,5 +1,6 @@
-import os
 from torch.utils.data import Dataset
+import numpy as np
+import os
 
 
 class CustomDataset(Dataset):
@@ -9,7 +10,7 @@ class CustomDataset(Dataset):
 
         for subdir, dirs, files in os.walk(self.data_dir):
             for file in files:
-                if file.lower().endswith('.npy'):
+                if file.lower().endswith(".npy"):
                     path = os.path.join(subdir, file)
                     self.image_paths.append(path)
 
@@ -18,4 +19,4 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
-        return os.open(img_path)
+        return np.load(img_path)
