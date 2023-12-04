@@ -13,7 +13,8 @@ import torch.optim as optim
 import torch.nn as nn
 
 BATCH_SIZE = 64
-TRAINING_RATIO = 5  # The training ratio is the number of discriminator updates per generator update. The paper uses 5.
+# The training ratio is the number of discriminator updates per generator update. The paper uses 5.
+TRAINING_RATIO = 5
 GRADIENT_PENALTY_WEIGHT = 10  # As per the paper
 D = 64  # model size coef
 LATENT_DIM = 100  # size of the random noise input in the generator
@@ -78,59 +79,54 @@ def save_audio(y, path, cache):
     y = librosa.griffinlim(s, hop_length=int(cache["hop_length"]))
     scipy.io.wavfile.write(path, cache["sampling_rate"], y)
 
-def get_dataset_paths(directory, extension):
-    paths = []
-    for subdir, dirs, files in os.walk(directory):
-        for file in files:
-            if file.lower().endswith(extension):
-                path = os.path.join(subdir, file)
-                paths.append(path)
-    return paths
 
-GRADIENT_PENALTY_WEIGHT = 10
 D = 64
 LATENT_DIM = 100
 IMG_DIM = (1, 256, 256)
 
-def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, data, device):
-    training_set_size = data.shape[0]
-    indices = np.arange(training_set_size)
-    n_batches = int(training_set_size / batch_size)
-    
-    for epoch in range(n_epochs):
-        np.random.shuffle(indices)
+
+def train(
+    n_epochs,
+    generator,
+    discriminator,
+    batch_size,
+    training_ratio,
+    gen_optimizer,
+    disc_optimizer,
+    data_loader,
+    cache,
+    device,
+):
+    for epoch in range(1, n_epochs + 1):
         print("Epoch: ", epoch)
-        minibatches_size = batch_size * training_ratio
-        for i in range(n_batches):
+        for i, real_samples in enumerate(data_loader):
+            real_samples.to(device)
             discriminator.train()
             generator.train()
-            discriminator_minibatches = data[
-                indices[i * minibatches_size : (i + 1) * minibatches_size]
-            ]
 
             # Training Discriminator
             for j in range(training_ratio):
                 disc_optimizer.zero_grad()
-                real_samples = discriminator_minibatches[
-                    j * batch_size : (j + 1) * batch_size
-                ]
-                real_samples = torch.tensor(
-                    real_samples, device=device, dtype=torch.float32
+                # Generate fake data from the generator
+                noise = np.random.rand(batch_size, LATENT_DIM).astype(np.float32)
+                noise = torch.from_numpy(noise)
+
+                fake_samples = generator(noise)
+                print(real_samples.shape)
+
+                disc_real_output = discriminator(real_samples)
+                disc_fake_output = discriminator(fake_samples)
+                disc_loss_wasserstein = wasserstein_loss(
+                    disc_fake_output, disc_real_output
                 )
 
-                noise = torch.rand(batch_size, LATENT_DIM, device=device)
-                generated_samples = generator(
-                    noise
-                ).detach()  # Detach to avoid backprop through G
-
-                gp_loss = gradient_penalty_loss(
-                    discriminator, real_samples, generated_samples, device
+                # Compute gradient penalty
+                gradient_penalty = discriminator.compute_gradient_penalty(
+                    real_samples, fake_samples
                 )
 
-                disc_real = discriminator(real_samples)
-                disc_fake = discriminator(generated_samples)
-
-                disc_loss = -torch.mean(disc_real) + torch.mean(disc_fake) + gp_loss
+                # Total discriminator loss
+                disc_loss = disc_loss_wasserstein + gradient_penalty
                 disc_loss.backward()
                 disc_optimizer.step()
 
@@ -142,10 +138,14 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             gen_loss.backward()
             gen_optimizer.step()
 
-            # Generate images and save audio per epoch
-            # Adapt generate_images and save_audio functions to work with PyTorch tensors and operations
-            generate_images(generator, "./output/", epoch, cache)
+            if i % 100 == 0:
+                print(
+                    f"Epoch [{epoch}/{n_epochs}], Batch Step [{i}/{len(data_loader)}], "
+                    f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}"
+                )
 
+        if epoch % 25 == 0:
+            generate_images(generator, "../output/", epoch, cache)
             # Save models at the end of each epoch
             torch.save(
                 generator.state_dict(),
@@ -156,29 +156,40 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
                 os.path.join(AUDIO_OUT_DIR, f"discriminator_epoch_{epoch}.pth"),
             )
 
-def main():
+
+def main(b=64):
     # load parameters for audio reconstruction
     with open(STFT_ARRAY_DIR + "my_cache.json") as f:
         cache = json.load(f)
         print("Cache loaded!")
-
-    # load training data
-    paths = get_dataset_paths(STFT_ARRAY_DIR, ".npy")
-    X_train_ = np.zeros(shape=(len(paths), IMG_DIM[0], IMG_DIM[1]))
-    for i, path in enumerate(paths):
-        X_train_[i, :, :] = np.load(paths[i])
-    X_train_ = X_train_[:, :, :, None]
-
     # Now we initialize the generator and discriminator.
     generator = Generator()
     discriminator = Discriminator()
 
+    train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
+    # train_loader=DataLoader(train_set, batch_size=b, shuffle=True)
+    train_loader = DataLoader(train_set, batch_size=b, shuffle=True)
+
     gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
 
-    training_ratio=5
-    batch_size = 64
-        
+    training_ratio = 5
+
     # Training loop
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    train(5000, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, X_train_, device)
+    train(
+        5000,
+        generator,
+        discriminator,
+        b,
+        training_ratio,
+        gen_optimizer,
+        disc_optimizer,
+        train_loader,
+        cache,
+        device,
+    )
+
+
+if __name__ == "__main__":
+    main()
