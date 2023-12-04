@@ -33,7 +33,7 @@ def wasserstein_loss(y_true, y_pred):
     return torch.mean(y_true * y_pred)
 
 
-def gradient_penalty_loss(y_true, y_pred, averaged_samples, gradient_penalty_weight):
+def gradient_penalty_loss(y_pred, averaged_samples, gradient_penalty_weight):
     """for more detail: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
     gradients = grad(
         outputs=y_pred,
@@ -87,7 +87,6 @@ def save_audio(y, path, cache):
 # load parameters for audio reconstruction
 with open(STFT_ARRAY_DIR + "my_cache.json") as f:
     cache = json.load(f)
-print(cache)
 
 train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
 
@@ -127,7 +126,9 @@ for epoch in range(num_epochs):
         interpolated = epsilon * data + (1 - epsilon) * noise
         interpolated.requires_grad = True
         disc_y_pred = discriminator(interpolated)
-        gradient_penalty = gradient_penalty_loss(disc_y_pred, interpolated, GRADIENT_PENALTY_WEIGHT)
+        gradient_penalty = gradient_penalty_loss(
+            disc_y_pred, interpolated, GRADIENT_PENALTY_WEIGHT
+        )
 
         # Total discriminator loss
         disc_loss = disc_loss_wasserstein + gradient_penalty
@@ -142,8 +143,10 @@ for epoch in range(num_epochs):
         gen_optimizer.step()
 
         if i % 100 == 0:
-            print(f"Epoch [{epoch}/{num_epochs}], Batch Step [{i}/{len(train_loader)}], "
-                  f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}")
+            print(
+                f"Epoch [{epoch}/{num_epochs}], Batch Step [{i}/{len(train_loader)}], "
+                f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}"
+            )
 
     generate_images(generator, "./output/", epoch, cache)
 
