@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from model import Generator
 from CustomDataset import CustomDataset
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 # Set your hyperparameters
@@ -39,8 +40,8 @@ for epoch in range(EPOCHS):
         images = images.to(device)
 
         # Flatten the images and generate random noise as input
-        noise = torch.randn(images.size(0), LATENT_DIM)
-        noise = noise.to(device)
+        noise = np.random.rand(64, LATENT_DIM).astype(np.float32)
+        noise = torch.from_numpy(noise).to(device)
 
         # Zero the gradients
         optimizer.zero_grad()
