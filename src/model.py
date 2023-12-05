@@ -20,28 +20,46 @@ class Generator(nn.Module):
         self.conv6 = nn.Conv2d(D, D // 2, kernel_size=5, padding=2)
         self.conv7 = nn.Conv2d(D // 2, 1, kernel_size=5, padding=2)
         self.tanh = nn.Tanh()
+        self.batch_norm1 = nn.BatchNorm2d(16 * D)
+        self.batch_norm2 = nn.BatchNorm2d(8 * D)
+        self.batch_norm3 = nn.BatchNorm2d(4 * D)
+        self.batch_norm4 = nn.BatchNorm2d(2 * D)
+        self.batch_norm5 = nn.BatchNorm2d(D)
+        self.batch_norm6 = nn.BatchNorm2d(D // 2)
 
     def forward(self, x):
         x = self.fc(x)
         x = self.unflatten(x)
         x = self.relu(x)
         x = self.upsample1(x)
+        
         x = self.conv1(x)
+        x = self.batch_norm1(x)
         x = self.relu(x)
         x = self.upsample1(x)
+        
         x = self.conv2(x)
+        x = self.batch_norm2(x)
         x = self.relu(x)
         x = self.upsample1(x)
+        
         x = self.conv3(x)
+        x = self.batch_norm3(x)
         x = self.relu(x)
         x = self.upsample1(x)
+        
         x = self.conv4(x)
+        x = self.batch_norm4(x)
         x = self.relu(x)
         x = self.upsample1(x)
+        
         x = self.conv5(x)
+        x = self.batch_norm5(x)
         x = self.relu(x)
         x = self.upsample1(x)
+        
         x = self.conv6(x)
+        x = self.batch_norm6(x)
         x = self.relu(x)
         x = self.upsample1(x)
         x = self.conv7(x)

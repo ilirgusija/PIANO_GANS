@@ -86,7 +86,8 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             for j in range(training_ratio):
                 disc_optimizer.zero_grad()
                 # Generate fake data from the generator
-                noise = np.random.rand(batch_size, LATENT_DIM).astype(np.float32)
+                current_batch_size = real_samples.size(0)
+                noise = np.random.rand(current_batch_size, LATENT_DIM).astype(np.float32)
                 noise = torch.from_numpy(noise).to(device)
 
                 fake_samples = generator(noise).detach()

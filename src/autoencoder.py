@@ -40,7 +40,8 @@ for epoch in range(EPOCHS):
         images = images.to(device)
 
         # Flatten the images and generate random noise as input
-        noise = np.random.rand(64, LATENT_DIM).astype(np.float32)
+        current_batch_size = images.size(0)
+        noise = np.random.rand(current_batch_size, LATENT_DIM).astype(np.float32)
         noise = torch.from_numpy(noise).to(device)
 
         # Zero the gradients
@@ -49,15 +50,20 @@ for epoch in range(EPOCHS):
         # Forward pass
         outputs = generator(noise)
 
+        # print(outputs.shape)
+        # print(images.shape)
+        
         # Compute the loss
         loss = criterion(outputs, images)
 
         # Backward pass and optimization
         loss.backward()
+        # print(f"Batch #{i}, loss: {loss.item()}")
         optimizer.step()
 
         running_loss += loss.item()
     epoch_loss += [running_loss / len(data_loader)]
+    print(f"Running loss: {running_loss}, length: {len(data_loader)}")
     print(f"Epoch [{epoch + 1}/{EPOCHS}], Loss: {running_loss / len(data_loader)}")
 
 torch.save(generator.state_dict(), "autoencoder_model.pth")

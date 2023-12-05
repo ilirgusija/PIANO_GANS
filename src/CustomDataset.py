@@ -3,27 +3,57 @@ import numpy as np
 import os
 
 
-class CustomDataset(Dataset):
-    def __init__(self, data_dir):
-        self.data_dir = data_dir
-        self.image_paths = []
+from torch.utils.data import Dataset
+import numpy as np
+import os
 
-        for subdir, dirs, files in os.walk(self.data_dir):
-            for file in files:
-                if file.lower().endswith(".npy"):
-                    path = os.path.join(subdir, file)
-                    self.image_paths.append(path)
+class CustomDataset(Dataset):
+    def __init__(self, data_dir, replace_nan_with=0):
+        self.data_files = []  # Changed from image_paths for clarity
+
+        for filename in os.listdir(data_dir):
+            if not filename.endswith('.npy'):
+                print(f"Skipping non-npy file: {filename}")
+                continue
+
+            file_path = os.path.join(data_dir, filename)
+            try:
+                data = np.load(file_path, allow_pickle=True)
+                if np.isnan(data).any():
+                    if replace_nan_with is not None:
+                        print(f"NaN values found in {filename}. Replacing with {replace_nan_with}.")
+                        data = np.nan_to_num(data, nan=replace_nan_with)
+                    else:
+                        print(f"NaN values found in {filename}. Skipping this file.")
+                        continue
+                self.data_files.append(data)  # Only store the data, not the file path
+            except ValueError as e:
+                print(f"Error loading {filename}: {e}")
 
     def __len__(self):
-        return len(self.image_paths)
+        return len(self.data_files)
 
     def __getitem__(self, idx):
-        img_path = self.image_paths[idx]
-        img_data = np.load(img_path)
+        img_data = self.data_files[idx]  # Retrieve the data directly
+
+        # Perform the data checks
+        self.check_data_for_issues(img_data)
+        self.check_data_range(img_data)
 
         # Add a channel dimension if missing
-        img_data = np.expand_dims(
-            img_data, axis=0
-        )  # Assuming it's a single channel image
+        if img_data.ndim == 2:  # Checking number of dimensions
+            img_data = np.expand_dims(img_data, axis=0)
 
         return img_data
+
+    @staticmethod
+    def check_data_for_issues(data):
+        if np.isnan(data).any():
+            raise ValueError("Data contains NaN values")
+        if np.isinf(data).any():
+            raise ValueError("Data contains infinite values")
+
+    @staticmethod
+    def check_data_range(data, expected_min=-1, expected_max=1):
+        if np.min(data) < expected_min or np.max(data) > expected_max:
+            raise ValueError(f"Data range out of bounds: {np.min(data)}, {np.max(data)}")
