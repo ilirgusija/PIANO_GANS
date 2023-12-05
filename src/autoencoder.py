@@ -5,6 +5,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from model import Generator
 from CustomDataset import CustomDataset
+import matplotlib.pyplot as plt
 
 
 # Set your hyperparameters
@@ -13,8 +14,11 @@ LEARNING_RATE = 0.001
 BATCH_SIZE = 64
 EPOCHS = 10
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 # Initialize the generator and autoencoder
-generator = Generator()
+generator = Generator().to(device)
 
 STFT_ARRAY_DIR = "../data/resized_stft/"
 
@@ -22,34 +26,45 @@ STFT_ARRAY_DIR = "../data/resized_stft/"
 criterion = nn.MSELoss()
 optimizer = optim.Adam(generator.parameters(), lr=LEARNING_RATE)
 
+
 data_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
 data_loader = DataLoader(data_set, batch_size=64, shuffle=True)
 
 # Pretrain the autoencoder
+epoch_loss = []
 for epoch in range(EPOCHS):
     running_loss = 0.0
     for i, data in enumerate(data_loader):
         images = data
-        
+        images = images.to(device)
+
         # Flatten the images and generate random noise as input
-        images = images.view(images.size(0), -1)
         noise = torch.randn(images.size(0), LATENT_DIM)
-        
+        noise = noise.to(device)
+
         # Zero the gradients
         optimizer.zero_grad()
-        
+
         # Forward pass
         outputs = generator(noise)
-        
+
         # Compute the loss
         loss = criterion(outputs, images)
-        
+
         # Backward pass and optimization
         loss.backward()
         optimizer.step()
-        
+
         running_loss += loss.item()
-    
+    epoch_loss += [running_loss / len(data_loader)]
     print(f"Epoch [{epoch + 1}/{EPOCHS}], Loss: {running_loss / len(data_loader)}")
 
-torch.save(generator.state_dict(), 'autoencoder_model.pth')
+torch.save(generator.state_dict(), "autoencoder_model.pth")
+
+plt.figure(figsize=(12, 7))
+plt.clf()
+plt.plot(epoch_loss, label="train")
+plt.xlabel("epoch")
+plt.ylabel("loss")
+plt.legend(loc=1)
+plt.savefig("autoencoder_loss.png")
