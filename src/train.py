@@ -20,6 +20,29 @@ AUDIO_OUT_DIR = "../data/images/"
 PARAM_DIR="../params/"
 OUTPUT_DIR="../output/"
 
+def compute_gradient_penalty(critic, real_samples, fake_samples):
+    # Random weight term for interpolation between real and fake samples
+    alpha = torch.rand((real_samples.size(0), 1, 1, 1), device=real_samples.device)
+    # Get random interpolation between real and fake samples
+    interpolates = (
+        alpha * real_samples + ((1 - alpha) * fake_samples)
+    ).requires_grad_(True)
+    d_interpolates = critic(interpolates)
+    fake = torch.ones(d_interpolates.size(), requires_grad=False, device=real_samples.device)
+
+    # Get gradient w.r.t. interpolates
+    gradients = torch.autograd.grad(
+        outputs=d_interpolates,
+        inputs=interpolates,
+        grad_outputs=fake,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
+
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    return gradient_penalty
+
 def wasserstein_loss(y_true, y_pred):
     """for more detail: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
     return torch.mean(y_true * y_pred)
@@ -71,7 +94,7 @@ def plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, output_dir):
     plt.savefig(os.path.join(output_dir, f"loss_epoch_{epoch}.png"))
     plt.close()
 
-def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, data_loader, cache, device):
+def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, data_loader, cache, gp_w='10', device='cuda'):
     disc_loss_log = []
     gen_loss_log = []
     
@@ -83,7 +106,7 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             generator.train()
             
             # Training Discriminator
-            for j in range(training_ratio):
+            for _ in range(training_ratio):
                 disc_optimizer.zero_grad()
                 # Generate fake data from the generator
                 noise = np.random.rand(batch_size, LATENT_DIM).astype(np.float32)
@@ -94,20 +117,24 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
 
                 disc_real_output = discriminator(real_samples)
                 disc_fake_output = discriminator(fake_samples)
-                disc_loss_wasserstein = wasserstein_loss(disc_fake_output, disc_real_output)
-
+                w_loss_real = torch.mean(disc_real_output) # wasserstein loss
+                w_loss_fake = -torch.mean(disc_fake_output) # wasserstein loss
+                w_loss_critic = w_loss_real-w_loss_fake
+                
                 # Compute gradient penalty
-                gradient_penalty = discriminator.compute_gradient_penalty(real_samples, fake_samples)
+                gradient_penalty = compute_gradient_penalty(discriminator, real_samples, fake_samples)
 
                 # Total discriminator loss
-                disc_loss = disc_loss_wasserstein + gradient_penalty
+                disc_loss = w_loss_critic + gp_w*gradient_penalty
                 disc_loss.backward()
                 disc_optimizer.step()
 
             # Training Generator
             gen_optimizer.zero_grad()
             noise = torch.rand(batch_size, LATENT_DIM, device=device)
+            
             generated_samples = generator(noise)
+            
             gen_loss = -torch.mean(discriminator(generated_samples))
             gen_loss.backward()
             gen_optimizer.step()
