@@ -1,20 +1,16 @@
 import torch.nn as nn
 import torch
 
-BATCH_SIZE = 64
-TRAINING_RATIO = 5
-GRADIENT_PENALTY_WEIGHT = 10
-EPOCH = 5000
+
 D = 64
 LATENT_DIM = 100
-IMG_DIM = (1, 256, 256)
 
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
         self.fc = nn.Linear(LATENT_DIM, 512 * D)
         self.unflatten = nn.Unflatten(1, (32 * D, 4, 4))
-        self.relu = nn.ReLU()
+        self.relu = nn.LeakyReLU()
         self.upsample1 = nn.Upsample(scale_factor=2)
         self.conv1 = nn.Conv2d(32 * D, 16 * D, kernel_size=5, padding=2)
         self.conv2 = nn.Conv2d(16 * D, 8 * D, kernel_size=5, padding=2)
@@ -56,16 +52,12 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
+        self.leaky_relu = nn.LeakyReLU()
         self.conv1 = nn.Conv2d(1, D, kernel_size=5, stride=2, padding=2)
-        self.leaky_relu1 = nn.LeakyReLU(0.2)
         self.conv2 = nn.Conv2d(D, D * 2, kernel_size=5, stride=2, padding=2)
-        self.leaky_relu2 = nn.LeakyReLU(0.2)
         self.conv3 = nn.Conv2d(D * 2, D * 4, kernel_size=5, stride=2, padding=2)
-        self.leaky_relu3 = nn.LeakyReLU(0.2)
         self.conv4 = nn.Conv2d(D * 4, D * 8, kernel_size=5, stride=2, padding=2)
-        self.leaky_relu4 = nn.LeakyReLU(0.2)
         self.conv5 = nn.Conv2d(D * 8, D * 16, kernel_size=5, stride=2, padding=2)
-        self.leaky_relu5 = nn.LeakyReLU(0.2)
         self.flatten = nn.Flatten()
         self.fc = nn.Linear(D * 16 * 16 * 16, 1)
 
@@ -93,20 +85,20 @@ class Discriminator(nn.Module):
             only_inputs=True,
         )[0]
 
-        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()*gradient_penalty_weight
         return gradient_penalty
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.leaky_relu1(x)
+        x = self.leaky_relu(x)
         x = self.conv2(x)
-        x = self.leaky_relu2(x)
+        x = self.leaky_relu(x)
         x = self.conv3(x)
-        x = self.leaky_relu3(x)
+        x = self.leaky_relu(x)
         x = self.conv4(x)
-        x = self.leaky_relu4(x)
+        x = self.leaky_relu(x)
         x = self.conv5(x)
-        x = self.leaky_relu5(x)
+        x = self.leaky_relu(x)
         x = self.flatten(x)
         x = self.fc(x)
         return x
