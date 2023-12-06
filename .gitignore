@@ -9,3 +9,4 @@ data/clipped_stft/*
 data/resized_stft/*
 data/spectrograms/*
 *.zip
+params/*

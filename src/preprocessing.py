@@ -283,9 +283,9 @@ def preprocessing():
     """
     Data processing for DCGAN and SpecGAN
     """
-    make_audio_chunks(seconds=20, dest_dir=AUDIO_CHUNKS_20S_DIR)
+    make_audio_chunks(seconds=10, dest_dir=AUDIO_CHUNKS_10S_DIR)
     # display_spectrogram()
-    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_20S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
+    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_10S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
     # audio_reconstruction()
     record_mean_std()
     preprocessing_arrays()
@@ -296,5 +296,6 @@ if __name__ == "__main__":
     # preprocessing()
     # create_cache_file(STFT_ARRAY_DIR, 512, 1025, 862)
     create_cache_file(RESIZED_STFT_DIR, 512, 512, 512)
+    create_cache_file(RESIZED_STFT_DIR, 256, 256, 256)
     # dc_gan_processing()
     # style_gan_preprocessing()

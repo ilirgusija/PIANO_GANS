@@ -65,6 +65,53 @@ class Generator(nn.Module):
         x = self.conv7(x)
         x = self.tanh(x)
         return x
+    
+class ResnetGenerator(nn.Module):
+    def __init__(self):
+        super(ResnetGenerator, self).__init__()
+        self.fc = nn.Linear(LATENT_DIM, 512 * D)
+        self.unflatten = nn.Unflatten(1, (32 * D, 4, 4))
+        self.relu = nn.LeakyReLU()
+        self.upsample = nn.Upsample(scale_factor=2)
+
+        # Residual blocks
+        self.resblock1 = ResidualBlock(32 * D, 16 * D)
+        self.resblock2 = ResidualBlock(16 * D, 8 * D)
+        self.resblock3 = ResidualBlock(8 * D, 4 * D)
+        self.resblock4 = ResidualBlock(4 * D, 2 * D)
+        self.resblock5 = ResidualBlock(2 * D, D)
+        self.resblock6 = ResidualBlock(D, D // 2)
+        self.resblock7 = ResidualBlock(D // 2, 1)
+        
+        self.tanh = nn.Tanh()
+
+    def forward(self, x):
+        x = self.fc(x)
+        x = self.unflatten(x)
+        x = self.relu(x)
+        x = self.upsample(x)
+        
+        x = self.resblock1(x)
+        x = self.upsample(x)
+        
+        x = self.resblock2(x)
+        x = self.upsample(x)
+        
+        x = self.resblock3(x)
+        x = self.upsample(x)
+        
+        x = self.resblock4(x)
+        x = self.upsample(x)
+        
+        x = self.resblock5(x)
+        x = self.upsample(x)
+        
+        x = self.resblock6(x)
+        x = self.upsample(x)        
+
+        x = self.resblock7(x)
+        x = self.tanh(x)
+        return x
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
