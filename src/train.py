@@ -6,7 +6,7 @@ import torch
 import os
 import skimage.transform
 import pandas as pd
-from model import Generator, Discriminator, Critic
+from model import Generator, Discriminator, Critic, ResnetGenerator
 import json
 import scipy.io.wavfile
 import torch.optim as optim
@@ -57,9 +57,11 @@ def tile_images(image_stack):
     tiled_images = np.concatenate(image_list, axis=1)
     return tiled_images
 
-def generate_images(generator_model, output_dir, epoch, cache):
+def generate_images(generator_model, output_dir, epoch, cache, device):
     """Feeds random seeds into the generator and tiles and saves the output to a PNG file."""
-    test_image_stack = generator_model.predict(np.random.rand(5, LATENT_DIM))
+    noise = torch.randn(5, LATENT_DIM).to(device)  # Generate random noise
+    with torch.no_grad():  # Ensure no gradients are computed
+        test_image_stack = generator_model(noise)  # Generate images
 
     # generate and save sample audio file for each epoch
     for i in range(5):
@@ -145,9 +147,6 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             print(f"Epoch [{epoch}/{n_epochs}], Batch Step [{i}/{len(data_loader)}], "f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}")
             # if i % 100 == 0:
             #     print(f"Epoch [{epoch}/{n_epochs}], Batch Step [{i}/{len(data_loader)}], "f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}")
-
-        plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, OUTPUT_DIR)
-        generate_images(generator, AUDIO_OUT_DIR, epoch, cache)
         # Save models at the end of each epoch
         torch.save(
             generator.state_dict(),
@@ -157,6 +156,9 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             discriminator.state_dict(),
             os.path.join(PARAM_DIR, f"discriminator_epoch_{epoch}.pth"),
         )
+
+        plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, OUTPUT_DIR)
+        generate_images(generator, AUDIO_OUT_DIR, epoch, cache, device)
 
 
 def main(b=64):
@@ -170,7 +172,7 @@ def main(b=64):
     print(f"Using {num_gpus} GPUs.")
     
     # Initialize models
-    generator = Generator()
+    generator = ResnetGenerator()
     discriminator = Critic()
 
     # Wrap models with DataParallel if more than one GPU is available
@@ -180,27 +182,28 @@ def main(b=64):
         
         
     # Load the state dictionary from the file
-    state_dict = torch.load('autoencoder_model.pth')
+    # state_dict = torch.load('../params/reg_gen/autoencoder_model_30.pth')
+    state_dict = torch.load('../params/resnet_gen/autoencoder_model.pth')
 
     # Adjust the keys based on whether you are using DataParallel or not
 
-    new_state_dict = {'module.' + k: v for k, v in state_dict.items()}
+    # state_dict = {'module.' + k: v for k, v in state_dict.items()}
 
-    generator.load_state_dict(new_state_dict)
+    generator.load_state_dict(state_dict)
     generator.to(device)
     discriminator.to(device)
 
     train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
     train_loader = DataLoader(train_set, batch_size=b, shuffle=True)
 
-    gen_optimizer = optim.Adam(generator.parameters(), lr=0.00001, betas=(0.5, 0.9))
-    disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.00001, betas=(0.5, 0.9))
+    gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
+    disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
 
     training_ratio = 5
 
     # Training loop
     train(
-        2000,
+        100,
         generator,
         discriminator,
         b,
