@@ -10,7 +10,7 @@ LATENT_DIM = 100
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Load the trained model
-generator = Generator()
+generator = Generator().to(device)
 generator.load_state_dict(torch.load("autoencoder_model.pth", map_location=device))
 generator.eval()
 

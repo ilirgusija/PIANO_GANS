@@ -6,7 +6,7 @@ import torch
 import os
 import skimage.transform
 import pandas as pd
-from model import Generator, Discriminator
+from model import Generator, Discriminator, Critic
 import json
 import scipy.io.wavfile
 import torch.optim as optim
@@ -19,6 +19,33 @@ STFT_ARRAY_DIR = "../data/resized_stft/"
 AUDIO_OUT_DIR = "../data/images/"
 PARAM_DIR="../params/"
 OUTPUT_DIR="../output/"
+
+def compute_gradient_penalty(
+    model, real_samples, fake_samples, gradient_penalty_weight=10
+):
+    # Random weight term for interpolation between real and fake samples
+    alpha = torch.rand((real_samples.size(0), 1, 1, 1), device=real_samples.device)
+    # Get random interpolation between real and fake samples
+    interpolates = (
+        alpha * real_samples + ((1 - alpha) * fake_samples)
+    ).requires_grad_(True)
+    d_interpolates = model(interpolates)
+    fake = torch.ones(
+        d_interpolates.size(), requires_grad=False, device=real_samples.device
+    )
+
+    # Get gradient w.r.t. interpolates
+    gradients = torch.autograd.grad(
+        outputs=d_interpolates,
+        inputs=interpolates,
+        grad_outputs=fake,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
+
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()*gradient_penalty_weight
+    return gradient_penalty
 
 def wasserstein_loss(y_true, y_pred):
     """for more detail: https://github.com/keras-team/keras-contrib/blob/master/examples/improved_wgan.py"""
@@ -98,7 +125,7 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
                 disc_loss_wasserstein = wasserstein_loss(disc_fake_output, disc_real_output)
 
                 # Compute gradient penalty
-                gradient_penalty = discriminator.compute_gradient_penalty(real_samples, fake_samples)
+                gradient_penalty = compute_gradient_penalty(discriminator, real_samples, fake_samples)
 
                 # Total discriminator loss
                 disc_loss = disc_loss_wasserstein + gradient_penalty
@@ -119,18 +146,17 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
             # if i % 100 == 0:
             #     print(f"Epoch [{epoch}/{n_epochs}], Batch Step [{i}/{len(data_loader)}], "f"Discriminator Loss: {disc_loss.item()}, Generator Loss: {gen_loss.item()}")
 
-        if epoch % 25 == 0:
-            plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, OUTPUT_DIR)
-            generate_images(generator, AUDIO_OUT_DIR, epoch, cache)
-            # Save models at the end of each epoch
-            torch.save(
-                generator.state_dict(),
-                os.path.join(PARAM_DIR, f"generator_epoch_{epoch}.pth"),
-            )
-            torch.save(
-                discriminator.state_dict(),
-                os.path.join(PARAM_DIR, f"discriminator_epoch_{epoch}.pth"),
-            )
+        plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, OUTPUT_DIR)
+        generate_images(generator, AUDIO_OUT_DIR, epoch, cache)
+        # Save models at the end of each epoch
+        torch.save(
+            generator.state_dict(),
+            os.path.join(PARAM_DIR, f"generator_epoch_{epoch}.pth"),
+        )
+        torch.save(
+            discriminator.state_dict(),
+            os.path.join(PARAM_DIR, f"discriminator_epoch_{epoch}.pth"),
+        )
 
 
 def main(b=64):
@@ -138,10 +164,31 @@ def main(b=64):
     with open(STFT_ARRAY_DIR + "my_cache.json") as f:
         cache = json.load(f)
         print("Cache loaded!")
+    # Setup for DataParallel
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Now we initialize the generator and discriminator.
-    generator = Generator().to(device)
-    discriminator = Discriminator().to(device)
+    num_gpus = torch.cuda.device_count()
+    print(f"Using {num_gpus} GPUs.")
+    
+    # Initialize models
+    generator = Generator()
+    discriminator = Critic()
+
+    # Wrap models with DataParallel if more than one GPU is available
+    if num_gpus > 1:
+        generator = nn.DataParallel(generator)
+        discriminator = nn.DataParallel(discriminator)
+        
+        
+    # Load the state dictionary from the file
+    state_dict = torch.load('autoencoder_model.pth')
+
+    # Adjust the keys based on whether you are using DataParallel or not
+
+    new_state_dict = {'module.' + k: v for k, v in state_dict.items()}
+
+    generator.load_state_dict(new_state_dict)
+    generator.to(device)
+    discriminator.to(device)
 
     train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
     train_loader = DataLoader(train_set, batch_size=b, shuffle=True)

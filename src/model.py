@@ -66,6 +66,63 @@ class Generator(nn.Module):
         x = self.tanh(x)
         return x
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.leaky_relu = nn.LeakyReLU(0.2)
+
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+        self.stride = stride
+
+        # To match the dimensions if in_channels and out_channels are different
+        self.match_dimensions = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0),
+            nn.BatchNorm2d(out_channels)
+        ) if in_channels != out_channels else nn.Identity()
+
+    def forward(self, x):
+        identity = self.match_dimensions(x)
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.leaky_relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        out += identity  # Skip connection
+        out = self.leaky_relu(out)
+
+        return out
+    
+class Critic(nn.Module):
+    def __init__(self):
+        super(Critic, self).__init__()
+        self.initial = nn.Sequential(
+            nn.Conv2d(1, D, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(0.2)
+        )
+        self.resblock1 = ResidualBlock(D, D * 2, stride=2)
+        self.resblock2 = ResidualBlock(D * 2, D * 4, stride=2)
+        self.resblock3 = ResidualBlock(D * 4, D * 8, stride=2)
+        self.resblock4 = ResidualBlock(D * 8, D * 16, stride=2)
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(D * 16 * 16 * 16, 1)  # Adjust the input size according to your image size
+
+    def forward(self, x):
+        x = self.initial(x)
+        x = self.resblock1(x)
+        x = self.resblock2(x)
+        x = self.resblock3(x)
+        x = self.resblock4(x)
+        x = self.flatten(x)
+        x = self.fc(x)
+        return x
+
 
 class Discriminator(nn.Module):
     def __init__(self):
