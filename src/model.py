@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
 
-
 D = 64
 LATENT_DIM = 100
 
@@ -146,9 +145,9 @@ class ResidualBlock(nn.Module):
 
         return out
     
-class Critic(nn.Module):
+class ResnetDiscriminator(nn.Module):
     def __init__(self):
-        super(Critic, self).__init__()
+        super(ResnetDiscriminator, self).__init__()
         self.initial = nn.Sequential(
             nn.Conv2d(1, D, kernel_size=3, stride=2, padding=1),
             nn.LeakyReLU(0.2)
@@ -169,8 +168,7 @@ class Critic(nn.Module):
         x = self.flatten(x)
         x = self.fc(x)
         return x
-
-
+# 
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
