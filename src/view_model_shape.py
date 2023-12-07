@@ -1,25 +1,12 @@
 import torch
-import torch.nn as nn
-from model import Generator, Discriminator, Critic, ResnetGenerator, UNetGenerator
+from model import Generator, Discriminator, ResnetDiscriminator, ResnetGenerator, UNetGenerator
 D = 64
 import numpy as np
 
-# # Initialize an instance of your Generator
-# generator = Generator()
-
-# # Create a random input tensor to feed through the model (latent vector)
-# input_tensor = torch.randn(1, 100)
-
-# # Forward pass to generate the computational graph
-# output_tensor = generator(input_tensor)
-
-# # Visualize the computational graph
-# dot = make_dot(output_tensor, params=dict(generator.named_parameters()))
-# dot.render("generator_model", format="png")  
 print("#########################################################")
 
 dummy_input = torch.randn(1, 1, 512, 512)  # Eoutputample input size, adjust as needed
-model = Critic()
+model = ResnetDiscriminator()
 output = model.initial(dummy_input)
 print(output.shape)
 output = model.resblock1(output)

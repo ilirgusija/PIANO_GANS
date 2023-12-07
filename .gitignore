@@ -8,5 +8,6 @@ data/stft_arrays/*
 data/clipped_stft/*
 data/resized_stft/*
 data/spectrograms/*
+data/dc_gan_stuff/*
 *.zip
 params/*

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from model import Generator, ResnetGenerator, UNetGenerator
+from model import Generator, ResnetGenerator
 from CustomDataset import CustomDataset
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,8 +23,9 @@ if num_gpus > 1:
     generator = nn.DataParallel(generator)
 generator.to(device)
 
-STFT_ARRAY_DIR = "../data/resized_stft/"
-data_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
+DC_GAN_DIR = "../data/dc_gan_stuff/"
+# STFT_ARRAY_DIR = "../data/resized_stft/"
+data_set = CustomDataset(data_dir=DC_GAN_DIR)
 data_loader = DataLoader(data_set, batch_size=BATCH_SIZE, shuffle=True)
 
 # Using AdamW optimizer with weight decay for regularization

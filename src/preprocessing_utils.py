@@ -15,7 +15,6 @@ def get_filename(path):
     """
     return os.path.splitext(os.path.basename(path))[0]
 
-
 def get_filename_list(paths):
     """
     Function used to retrieve a list of filenames from a list of absolute paths
@@ -26,6 +25,14 @@ def get_filename_list(paths):
     """
     return [os.path.splitext(os.path.basename(path))[0] for path in paths]
 
+def get_dataset_paths(directory, extension):
+    paths = []
+    for subdir, dirs, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(extension):
+                path = os.path.join(subdir, file)
+                paths.append(path)
+    return paths
 
 def get_unprocessed_items(src_dir, dest_dir):
     """
@@ -49,7 +56,6 @@ def get_unprocessed_items(src_dir, dest_dir):
     else:
         return []
 
-
 def get_absolute_file_paths(directory, extension=None):
     """
     Function used to retrieve absolute paths to all files of specified file type under a directory
@@ -72,7 +78,6 @@ def get_absolute_file_paths(directory, extension=None):
                 paths.append(path)
     return paths
 
-
 def display_progress_eta(current_item, total_items, start_time):
     """
     Function used to display progress and ETA on the console.
@@ -87,7 +92,6 @@ def display_progress_eta(current_item, total_items, start_time):
     seconds = (time.time() - start_time) / index * (len_total - index)
     eta = str(datetime.timedelta(seconds=round(seconds)))
     print("\r\nProcessed {}% ({}/{}) \nETA: {}".format(percentage, index, len_total, eta))
-
 
 def increase_brightness(s):
     """

@@ -6,7 +6,7 @@ import torch
 import os
 import skimage.transform
 import pandas as pd
-from model import Generator, Discriminator, Critic, ResnetGenerator
+from model import Generator, Discriminator, ResnetDiscriminator, ResnetGenerator
 import json
 import scipy.io.wavfile
 import torch.optim as optim
@@ -15,10 +15,13 @@ from CustomDataset import CustomDataset
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
+DC_GAN_DIR = "../data/dc_gan_stuff/"
 STFT_ARRAY_DIR = "../data/resized_stft/"
 AUDIO_OUT_DIR = "../data/images/"
 PARAM_DIR="../params/"
 OUTPUT_DIR="../output/"
+D = 64
+LATENT_DIM = 100
 
 def compute_gradient_penalty(
     model, real_samples, fake_samples, gradient_penalty_weight=10
@@ -85,9 +88,6 @@ def save_audio(y, path, cache):
     s = np.exp(s)
     y = librosa.griffinlim(s, hop_length=int(cache["hop_length"]))
     scipy.io.wavfile.write(path, cache["sampling_rate"], y)
-
-D = 64
-LATENT_DIM = 100
 
 def plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, output_dir):
     plt.figure(figsize=(10, 5))
@@ -160,12 +160,12 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
         plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, OUTPUT_DIR)
         generate_images(generator, AUDIO_OUT_DIR, epoch, cache, device)
 
-
-def main(b=64):
+def main(epochs, batch_size, device, training_ratio = 5, using_pretrained=False):
     # load parameters for audio reconstruction
     with open(STFT_ARRAY_DIR + "my_cache.json") as f:
         cache = json.load(f)
         print("Cache loaded!")
+        
     # Setup for DataParallel
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_gpus = torch.cuda.device_count()
@@ -173,23 +173,30 @@ def main(b=64):
     
     # Initialize models
     generator = ResnetGenerator()
-    discriminator = Critic()
+    discriminator = ResnetDiscriminator()
 
+    using_data_parallel = False
     # Wrap models with DataParallel if more than one GPU is available
     if num_gpus > 1:
         generator = nn.DataParallel(generator)
         discriminator = nn.DataParallel(discriminator)
-        
-        
-    # Load the state dictionary from the file
-    # state_dict = torch.load('../params/reg_gen/autoencoder_model_30.pth')
-    state_dict = torch.load('../params/resnet_gen/autoencoder_model.pth')
+        using_data_parallel = True
+    
+    if using_pretrained:
+        # Load the state dictionary from the file
+        # state_dict = torch.load('../params/reg_gen/autoencoder_model_30.pth')
+        state_dict = torch.load('../params/resnet_gen/autoencoder_model.pth')
 
-    # Adjust the keys based on whether you are using DataParallel or not
+        # Adjust the keys based on whether you are using DataParallel or not
+        if using_data_parallel:  # Set this based on your model
+            # Add 'module.' prefix to each key
+            new_state_dict = {'module.' + k: v for k, v in state_dict.items()}
+        else:
+            # Remove 'module.' prefix
+            new_state_dict = {k[len("module."):]: v for k, v in state_dict.items() if k.startswith("module.")}
 
-    # state_dict = {'module.' + k: v for k, v in state_dict.items()}
-
-    generator.load_state_dict(state_dict)
+        # Load the adjusted state dictionary into the model
+        generator.load_state_dict(new_state_dict)
     generator.to(device)
     discriminator.to(device)
 
@@ -199,22 +206,8 @@ def main(b=64):
     gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
 
-    training_ratio = 5
-
     # Training loop
-    train(
-        100,
-        generator,
-        discriminator,
-        b,
-        training_ratio,
-        gen_optimizer,
-        disc_optimizer,
-        train_loader,
-        cache,
-        device,
-    )
-
+    train(epochs, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, train_loader, cache, device)
 
 if __name__ == "__main__":
     main()

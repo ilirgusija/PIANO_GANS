@@ -8,12 +8,11 @@ import numpy as np
 import os
 
 class CustomDataset(Dataset):
-    def __init__(self, data_dir, replace_nan_with=0):
-        self.data_files = []  # Changed from image_paths for clarity
+    def __init__(self, data_dir, replace_nan_with=None):
+        self.data_files = [] 
 
         for filename in os.listdir(data_dir):
             if not filename.endswith('.npy'):
-                print(f"Skipping non-npy file: {filename}")
                 continue
 
             file_path = os.path.join(data_dir, filename)
@@ -26,7 +25,7 @@ class CustomDataset(Dataset):
                     else:
                         print(f"NaN values found in {filename}. Skipping this file.")
                         continue
-                self.data_files.append(data)  # Only store the data, not the file path
+                self.data_files.append(data) 
             except ValueError as e:
                 print(f"Error loading {filename}: {e}")
 
