@@ -23,9 +23,7 @@ OUTPUT_DIR="../output/"
 D = 64
 LATENT_DIM = 100
 
-def compute_gradient_penalty(
-    model, real_samples, fake_samples, gradient_penalty_weight=10
-):
+def compute_gradient_penalty(model, real_samples, fake_samples, gradient_penalty_weight=10):
     # Random weight term for interpolation between real and fake samples
     alpha = torch.rand((real_samples.size(0), 1, 1, 1), device=real_samples.device)
     # Get random interpolation between real and fake samples
@@ -160,7 +158,7 @@ def train(n_epochs, generator, discriminator, batch_size, training_ratio, gen_op
         plot_and_save_loss_graph(disc_loss_log, gen_loss_log, epoch, OUTPUT_DIR)
         generate_images(generator, AUDIO_OUT_DIR, epoch, cache, device)
 
-def main(epochs, batch_size, device, training_ratio = 5, using_pretrained=False):
+def main(epochs, batch_size, training_ratio = 5, using_pretrained=False):
     # load parameters for audio reconstruction
     with open(STFT_ARRAY_DIR + "my_cache.json") as f:
         cache = json.load(f)
@@ -184,11 +182,10 @@ def main(epochs, batch_size, device, training_ratio = 5, using_pretrained=False)
     
     if using_pretrained:
         # Load the state dictionary from the file
-        # state_dict = torch.load('../params/reg_gen/autoencoder_model_30.pth')
         state_dict = torch.load('../params/resnet_gen/autoencoder_model.pth')
 
         # Adjust the keys based on whether you are using DataParallel or not
-        if using_data_parallel:  # Set this based on your model
+        if using_data_parallel:
             # Add 'module.' prefix to each key
             new_state_dict = {'module.' + k: v for k, v in state_dict.items()}
         else:
@@ -201,7 +198,7 @@ def main(epochs, batch_size, device, training_ratio = 5, using_pretrained=False)
     discriminator.to(device)
 
     train_set = CustomDataset(data_dir=STFT_ARRAY_DIR)
-    train_loader = DataLoader(train_set, batch_size=b, shuffle=True)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
 
     gen_optimizer = optim.Adam(generator.parameters(), lr=0.0001, betas=(0.5, 0.9))
     disc_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.9))
@@ -210,4 +207,4 @@ def main(epochs, batch_size, device, training_ratio = 5, using_pretrained=False)
     train(epochs, generator, discriminator, batch_size, training_ratio, gen_optimizer, disc_optimizer, train_loader, cache, device)
 
 if __name__ == "__main__":
-    main()
+    main(100, 64)

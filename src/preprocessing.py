@@ -1,6 +1,5 @@
 import os
 import time
-
 import cv2
 import librosa.display
 import matplotlib.pyplot as plt
@@ -12,7 +11,6 @@ import skimage.transform
 from pydub import AudioSegment
 from pydub.utils import make_chunks
 import json
-
 import preprocessing_utils as prep_utils
 
 DATASET_DIR = "../data/audio/maestro-v3.0.0"
@@ -293,11 +291,11 @@ def preprocessing():
     """
     Data processing for SpecGAN
     """
-    # make_audio_chunks(seconds=10, dest_dir=AUDIO_CHUNKS_20S_DIR)
+    make_audio_chunks(seconds=20, dest_dir=AUDIO_CHUNKS_20S_DIR)
     # display_spectrogram()
-    # convert_audio_to_stft(src_dir=AUDIO_CHUNKS_20S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
-    # # audio_reconstruction()
-    # record_mean_std()
+    convert_audio_to_stft(src_dir=AUDIO_CHUNKS_20S_DIR, dest_dir=STFT_ARRAY_DIR, extension=".npy")
+    # audio_reconstruction()
+    record_mean_std()
     preprocessing_arrays()
     downsample()
 
@@ -355,10 +353,10 @@ def check_invalid_files_in_dataset(directory):
     return invalid_files_count
 
 if __name__ == "__main__":
-    # preprocessing()
-    # create_cache_file(RESIZED_STFT_DIR, 512, 512, 512)
+    preprocessing()
+    create_cache_file(RESIZED_STFT_DIR, 512, 512, 512)
     # dc_gan_processing()
-    display_spectrogram(STFT_ARRAY_DIR, True)
-    display_spectrogram(PROCESSED_STFT_DIR, True)
-    display_spectrogram(RESIZED_STFT_DIR, True)
+    # display_spectrogram(STFT_ARRAY_DIR, True)
+    # display_spectrogram(PROCESSED_STFT_DIR, True)
+    # display_spectrogram(RESIZED_STFT_DIR, True)
 
