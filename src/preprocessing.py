@@ -19,11 +19,11 @@ DATASET_DIR = "../data/audio/maestro-v3.0.0"
 AUDIO_CHUNKS_10S_DIR = "../data/audio/audio_chunks_10s/"
 AUDIO_CHUNKS_20S_DIR = "../data/audio/audio_chunks_20s/"
 SPECTROGRAM_DIR = "../data/spectrograms/"
-AUDIO_OUT_DIR = "../output/"
-STFT_ARRAY_DIR = "../data/stft_arrays/"
-DC_GAN_DIR = "../data/dc_gan_stuff/"
-PROCESSED_STFT_DIR = "../data/clipped_stft/"
-RESIZED_STFT_DIR = "../data/resized_stft/"
+AUDIO_OUT_DIR = "../output"
+STFT_ARRAY_DIR = "../data/stft_arrays"
+DC_GAN_DIR = "../data/dc_gan_stuff"
+PROCESSED_STFT_DIR = "../data/clipped_stft"
+RESIZED_STFT_DIR = "../data/resized_stft"
 
 def make_audio_chunks(seconds, dest_dir):
     """
@@ -50,11 +50,11 @@ def make_audio_chunks(seconds, dest_dir):
 
     print("\n\nChunks export completed.")
 
-def display_spectrogram():
+def display_spectrogram(directory, save=False):
     """
     Function used to generate and display sample spectrogram from audio files.
     """
-    paths = prep_utils.get_absolute_file_paths(RESIZED_STFT_DIR)
+    paths = prep_utils.get_absolute_file_paths(directory)
     count = 0
     start_time = time.time()
     i = 0
@@ -78,7 +78,11 @@ def display_spectrogram():
         plt.figure()
         librosa.display.specshow(melspec_log, y_axis='mel', x_axis='time')
         plt.colorbar()
-        plt.show()
+        if save:
+            plt.savefig(f"../output/spectrogram_{os.path.split(directory)[-1]}.png")
+        else:
+            plt.show()
+        
         count += 1
         i += 1  # Move to the next file
 
@@ -354,5 +358,7 @@ if __name__ == "__main__":
     # preprocessing()
     # create_cache_file(RESIZED_STFT_DIR, 512, 512, 512)
     # dc_gan_processing()
-    display_spectrogram()
+    display_spectrogram(STFT_ARRAY_DIR, True)
+    display_spectrogram(PROCESSED_STFT_DIR, True)
+    display_spectrogram(RESIZED_STFT_DIR, True)
 
