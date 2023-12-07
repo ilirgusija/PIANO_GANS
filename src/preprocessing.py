@@ -54,20 +54,33 @@ def display_spectrogram():
     """
     Function used to generate and display sample spectrogram from audio files.
     """
-    paths = prep_utils.get_absolute_file_paths(STFT_ARRAY_DIR)[:3]
+    paths = prep_utils.get_absolute_file_paths(RESIZED_STFT_DIR)
+    count = 0
     start_time = time.time()
-    for path in paths:
-        prep_utils.display_progress_eta(current_item=path, total_items=paths, start_time=start_time)
-        S = np.load(path)
+    i = 0
+
+    while count < 3 and i < len(paths):  # Ensure to not go beyond the list length
+        print(f"count: {count}, i: {i}")
+        prep_utils.display_progress_eta(current_item=paths[i], total_items=paths, start_time=start_time)
+        
+        S = np.load(paths[i])
         print("S Shape: ", S.shape)
 
-        melspec_log = librosa.feature.melspectrogram(S=np.log(S), sr=22050)
+        melspec_log = librosa.feature.melspectrogram(S=np.log(S + 1e-7), sr=22050)
         print("MelSpec Shape: ", melspec_log.shape)
+        
+        # Check for empty or invalid values in melspec_log
+        if melspec_log.size == 0 or np.isnan(melspec_log).any() or np.isinf(melspec_log).any():
+            print("Warning: MelSpec is empty or contains NaNs/Infinities. Skipping specshow.")
+            i += 1  # Move to the next file
+            continue
 
         plt.figure()
         librosa.display.specshow(melspec_log, y_axis='mel', x_axis='time')
         plt.colorbar()
         plt.show()
+        count += 1
+        i += 1  # Move to the next file
 
 def display_a_spectrogram(S):
     """
@@ -75,7 +88,7 @@ def display_a_spectrogram(S):
     """
     print("S Shape: ", S.shape)
 
-    melspec_log = librosa.feature.melspectrogram(S=np.log(S), sr=22050)
+    melspec_log = librosa.feature.melspectrogram(S=np.log(S+1e-7), sr=22050)
     print("MelSpec Shape: ", melspec_log.shape)
     
     # Check for empty or invalid values in melspec_log
@@ -186,25 +199,31 @@ def preprocessing_arrays():
     paths = df['path']
     means = df['mean']
     stds = df['std']
-    eps = 1e-7
+    start_time = time.time()
+    index = 0
+    for path in paths:
+        # prep_utils.display_progress_eta(current_item=path, total_items=paths, start_time=start_time)
+        S = np.load(path)
+        # Initial Spectrogram
+        # display_a_spectrogram(S)
 
-    for index in range(len(paths)):
-        print("Processing: ", paths[index])
-        S = np.load(paths[index])
+        # Logarithm and NaN handling
+        S_log = np.log1p(S)  # Safer logarithm
+        S_log = np.nan_to_num(S_log, nan=-999, posinf=-999, neginf=-999)  # Replace NaNs and Infinities
 
-        # Processing step for the magnitude matrix of the STFT.
-        # Take the logarithm of the magnitudes, normalize it, clip it at 3*std and rescale to [-1,1]
-        S = np.log(S + eps)
-        S = (S - means[index]) / (stds[index] + eps)
-        # clipping
-        S = np.where(np.abs(S) < 3, S, 3 * np.sign(S))
-        # rescale to [-1,1]
-        S /= 3
-        
-        display_a_spectrogram(S)
+        # Normalization
+        S_normalized = (S_log - means[index]) / (stds[index] + 1e-6)
 
-        out = PROCESSED_STFT_DIR + prep_utils.get_filename(paths[index]) + ".npy"
-        np.save(out, S)
+        # Clipping
+        S_clipped = np.where(np.abs(S_normalized) < 3, S_normalized, 3 * np.sign(S_normalized))
+
+        # Rescaling
+        S_rescaled = S_clipped / 3
+
+        # Save the processed array
+        out = PROCESSED_STFT_DIR + prep_utils.get_filename(path) + ".npy"
+        np.save(out, S_rescaled)
+        index+=1
 
 def downsample():
     """
@@ -276,7 +295,7 @@ def preprocessing():
     # # audio_reconstruction()
     # record_mean_std()
     preprocessing_arrays()
-    # downsample()
+    downsample()
 
 def dc_gan_processing():
     paths = prep_utils.get_dataset_paths(AUDIO_CHUNKS_20S_DIR, ".wav")
@@ -333,10 +352,7 @@ def check_invalid_files_in_dataset(directory):
 
 if __name__ == "__main__":
     # preprocessing()
-    check_invalid_files_in_dataset(STFT_ARRAY_DIR)
-    check_invalid_files_in_dataset(RESIZED_STFT_DIR)
-    # check_invalid_files_in_dataset(DC_GAN_DIR)
     # create_cache_file(RESIZED_STFT_DIR, 512, 512, 512)
     # dc_gan_processing()
-    # display_spectrogram()
+    display_spectrogram()
 

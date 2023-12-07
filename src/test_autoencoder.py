@@ -12,10 +12,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 num_gpus = torch.cuda.device_count()
 print(f"Using {num_gpus} GPUs.")
 
-params_names = ['autoencoder_model_10', 'autoencoder_model_20', 'autoencoder_model_11', 'autoencoder_model_30', 'autoencoder_model']
+# params_names = ['autoencoder_model_10', 'autoencoder_model_20', 'autoencoder_model_11', 'autoencoder_model_30', 'autoencoder_model']
+params_names = ['autoencoder_model']
 for params_name in params_names:
     generator = Generator().to(device)
-    state_dict = torch.load(f"../params/reg_gen/{params_name}.pth", map_location=device)
+    state_dict = torch.load(f"../params/resnet_gen/{params_name}.pth", map_location=device)
     # Load the trained model
     using_data_parallel = False
     # Wrap models with DataParallel if more than one GPU is available
@@ -52,4 +53,4 @@ for params_name in params_names:
         plt.imshow(np.transpose(generated_images[i], (1, 2, 0)), cmap="gray")
         plt.axis("off")
     plt.tight_layout()
-    plt.savefig(f"../output/{params_name}.png")
+    plt.savefig(f"../output/{params_name}_resnet.png")
